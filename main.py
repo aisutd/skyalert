@@ -13,10 +13,7 @@ MAP_KEY = os.environ["FIRMS_MAP_KEY"]
 # Contiguous United States: west, south, east, north
 US_BOUNDS = "-125,24,-66,50"
 
-# MODIS reports confidence as 0-100; VIIRS_SNPP_NRT detects more fires but only reports l/n/h
-SOURCE = "MODIS_NRT"
-
-url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{MAP_KEY}/{SOURCE}/{US_BOUNDS}/2"
+url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{MAP_KEY}/VIIRS_SNPP_NRT/{US_BOUNDS}/2"
 
 response = requests.get(url, timeout=60)
 print("Status code:", response.status_code)
@@ -24,7 +21,7 @@ print("Status code:", response.status_code)
 # Parse into dataframe
 df = pd.read_csv(StringIO(response.text))
 print(f"Found {len(df)} active fires")
-print(df[['latitude', 'longitude', 'brightness', 'confidence', 'acq_date', 'frp']].head())
+print(df[['latitude', 'longitude', 'bright_ti4', 'confidence', 'acq_date', 'frp']].head())
 
 ZOOM_START = 4
 HEAT_RADIUS = 14
@@ -83,8 +80,8 @@ for _, row in df.iterrows():
         color='red',
         fill=True,
         popup=(
-            f"Brightness: {row['brightness']}<br>"
-            f"Confidence: {row['confidence']}%<br>"
+            f"Brightness: {row['bright_ti4']}<br>"
+            f"Confidence: {row['confidence']}<br>"
             f"Date: {row['acq_date']}<br>"
             f"FRP: {row['frp']}"
         )
