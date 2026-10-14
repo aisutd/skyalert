@@ -48,7 +48,28 @@ SkyAlert is a computer vision system for detecting wildfires and floods from sat
 
    Wait for the `Done!` line before opening the map. If the script is stopped while saving, `fires.html` will be empty.
 
-`fires.ipynb` loads the same data into a pandas dataframe for exploring the columns. To run it in Cursor or VS Code, select the `.venv` Python kernel.
+`notebooks/fires.ipynb` loads the same data into a pandas dataframe for exploring the columns. To run it in Cursor or VS Code, select the `.venv` Python kernel.
+
+## Training Data
+
+`docs/dataset_options.md` compares candidate training datasets and recommends Next Day Wildfire Spread for fire prediction.
+
+`notebooks/ndws.ipynb` loads a sample of Next Day Wildfire Spread and shows its inputs, labels, and fire masks. On first run it downloads one 120 MB file into `data/ndws/`, which is not committed. Select the `.venv` kernel and run all cells. To print the same tables in the terminal instead:
+
+```bash
+python notebooks/inspect_ndws.py
+```
+
+## Project Layout
+
+```
+main.py                     FIRMS live fire map, writes fires.html
+notebooks/fires.ipynb       FIRMS data exploration
+notebooks/ndws.ipynb        Next Day Wildfire Spread exploration
+notebooks/inspect_ndws.py   Download and parse helper for ndws.ipynb
+docs/dataset_options.md     Training dataset comparison
+data/                       Downloaded datasets, not committed
+```
 
 ## Docker Setup
 
