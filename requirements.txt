@@ -3,3 +3,5 @@ numpy
 pandas
 folium
 python-dotenv
+fastapi
+uvicorn
