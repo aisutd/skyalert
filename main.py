@@ -11,22 +11,33 @@ load_dotenv()
 MAP_KEY = os.environ["FIRMS_MAP_KEY"]
 
 # Contiguous United States: west, south, east, north
+REGION_NAME = "Contiguous United States"
 US_BOUNDS = "-125,24,-66,50"
-
-url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{MAP_KEY}/VIIRS_SNPP_NRT/{US_BOUNDS}/2"
-
-response = requests.get(url, timeout=60)
-print("Status code:", response.status_code)
-
-# Parse into dataframe
-df = pd.read_csv(StringIO(response.text))
-print(f"Found {len(df)} active fires")
-print(df[['latitude', 'longitude', 'bright_ti4', 'confidence', 'acq_date', 'frp']].head())
+FIRMS_SOURCE = "VIIRS_SNPP_NRT"
+DAY_RANGE = 2
 
 ZOOM_START = 4
 HEAT_RADIUS = 14
 # Keep blur below the radius; a wider blur flattens every peak into pale blue
 HEAT_BLUR = 8
+
+# Build the path from where main.py lives, not from the folder the command was run in,
+# so fires.html always ends up next to main.py
+OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fires.html")
+
+
+def fetch_fires():
+    """Download the latest fire detections for the US from NASA FIRMS as a dataframe."""
+    url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{MAP_KEY}/{FIRMS_SOURCE}/{US_BOUNDS}/{DAY_RANGE}"
+    response = requests.get(url, timeout=60)
+    print("Status code:", response.status_code)
+    response.raise_for_status()
+    df = pd.read_csv(StringIO(response.text))
+    # Some FIRMS errors (e.g. too many requests) come back as plain text instead of
+    # CSV, so make sure we really got fire data before anything tries to use it
+    if "latitude" not in df.columns:
+        raise RuntimeError(f"FIRMS did not return fire data: {response.text[:200]}")
+    return df
 
 
 def percentile_density_weights(lats, lons, zoom, radius):
@@ -50,46 +61,58 @@ def percentile_density_weights(lats, lons, zoom, radius):
     return cell_ids.map(cell_rank).to_numpy() / counts
 
 
-# Build the interactive map
-m = folium.Map(location=[39, -98], zoom_start=ZOOM_START, tiles=None)
-folium.TileLayer(
-    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-    attr="Esri",
-    control=False,
-).add_to(m)
+def build_map(df):
+    """Build the interactive fire map (dots + heatmap toggle) from a FIRMS dataframe."""
+    # zoom_control="bottomright" moves the + / - buttons to the bottom right corner
+    m = folium.Map(location=[39, -98], zoom_start=ZOOM_START, tiles=None, zoom_control="bottomright")
+    folium.TileLayer(
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+        attr="Esri",
+        control=False,
+    ).add_to(m)
 
-# overlay=False makes these radio buttons, so only one layer shows at a time
-dots = folium.FeatureGroup(name="Fire dots", overlay=False).add_to(m)
-heat = folium.FeatureGroup(name="Fire density heatmap", overlay=False, show=False).add_to(m)
+    # overlay=False makes these radio buttons, so only one layer shows at a time
+    dots = folium.FeatureGroup(name="Fire dots", overlay=False).add_to(m)
+    heat = folium.FeatureGroup(name="Fire density heatmap", overlay=False, show=False).add_to(m)
 
-weights = percentile_density_weights(df['latitude'].to_numpy(), df['longitude'].to_numpy(), ZOOM_START, HEAT_RADIUS)
-heat_points = np.column_stack([df['latitude'], df['longitude'], weights]).tolist()
+    weights = percentile_density_weights(df['latitude'].to_numpy(), df['longitude'].to_numpy(), ZOOM_START, HEAT_RADIUS)
+    heat_points = np.column_stack([df['latitude'], df['longitude'], weights]).tolist()
 
-HeatMap(
-    heat_points,
-    radius=HEAT_RADIUS,
-    blur=HEAT_BLUR,
-    min_opacity=0.3,
-    gradient={0.3: 'blue', 0.5: 'cyan', 0.7: 'lime', 0.85: 'yellow', 1.0: 'red'},
-).add_to(heat)
+    HeatMap(
+        heat_points,
+        radius=HEAT_RADIUS,
+        blur=HEAT_BLUR,
+        min_opacity=0.3,
+        gradient={0.3: 'blue', 0.5: 'cyan', 0.7: 'lime', 0.85: 'yellow', 1.0: 'red'},
+    ).add_to(heat)
 
-for _, row in df.iterrows():
-    folium.CircleMarker(
-        location=[row['latitude'], row['longitude']],
-        radius=1,
-        color='red',
-        fill=True,
-        popup=(
-            f"Brightness: {row['bright_ti4']}<br>"
-            f"Confidence: {row['confidence']}<br>"
-            f"Date: {row['acq_date']}<br>"
-            f"FRP: {row['frp']}"
-        )
-    ).add_to(dots)
+    for _, row in df.iterrows():
+        folium.CircleMarker(
+            location=[row['latitude'], row['longitude']],
+            radius=1,
+            color='red',
+            fill=True,
+            popup=(
+                f"Brightness: {row['bright_ti4']}<br>"
+                f"Confidence: {row['confidence']}<br>"
+                f"Date: {row['acq_date']}<br>"
+                f"FRP: {row['frp']}"
+            )
+        ).add_to(dots)
 
-folium.LayerControl(collapsed=False).add_to(m)
+    folium.LayerControl(collapsed=False).add_to(m)
+    return m
 
-# Save and open fires.html in your browser to see the map
-print("Saving fires.html...")
-m.save("fires.html")
-print(f"Done! Map saved with {len(df)} fire markers. Open fires.html in your browser.") 
+
+# Only runs when you do `python main.py`, not when dashboard.py imports this file
+if __name__ == "__main__":
+    df = fetch_fires()
+    print(f"Found {len(df)} active fires")
+    print(df[['latitude', 'longitude', 'bright_ti4', 'confidence', 'acq_date', 'frp']].head())
+
+    m = build_map(df)
+
+    # Save and open fires.html in your browser to see the map
+    print(f"Saving {OUTPUT_PATH}...")
+    m.save(OUTPUT_PATH)
+    print(f"Done! Map saved with {len(df)} fire markers. Open fires.html in your browser.")
