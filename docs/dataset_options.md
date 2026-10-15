@@ -1,117 +1,128 @@
-# Dataset Options for Fire Prediction
+# Dataset Options for Fire Detection
 
 ## What we need
 
-SkyAlert's main goal is to predict where active wildfire will be, across the United States. Mapping land that has already burned is a second phase.
+SkyAlert's fire model detects active fire in a satellite image taken today. A ResNet classifier flags whether a patch contains fire, and a U-Net marks which pixels are on fire.
 
 Training needs labeled examples. Each example has two parts:
 
-- **Input:** a patch of land, as one or more grids of pixels.
-- **Label:** the correct answer for that patch. For fire prediction, this is a mask of where fire is the next day. For burned-area mapping, it is a mask of which pixels burned.
+- **Input:** a satellite image patch, with spectral bands.
+- **Label:** the correct answer for that patch, as a mask of which pixels are on fire. The ResNet label comes from the same mask: a patch is "fire" if any pixel in it is on fire.
 
-A dataset supports our task only if its labels answer the question we want the model to answer.
+A dataset supports our task only if:
 
-### Why NASA FIRMS is not a candidate
+1. Its inputs are satellite spectral bands, not weather or map layers.
+2. Its labels mark active fire in the same image, not burned land and not tomorrow's fire.
+3. Its bands include red, near-infrared, and shortwave infrared, so we can compute NDVI and NBR:
+   - NDVI = (NIR − Red) / (NIR + Red), which measures living vegetation.
+   - NBR = (NIR − SWIR) / (NIR + SWIR), which drops where land has burned.
 
-FIRMS is what `main.py` already uses for the live fire map. Each row is a single fire point: latitude, longitude, brightness, confidence, date, and fire radiative power. FIRMS has no image patch around the point, no weather or vegetation conditions from before the fire, and no record of where the fire went next. It records detections, not training examples, so it stays the live map feed.
+### Where NASA FIRMS fits
 
-## Option 1: Next Day Wildfire Spread
+FIRMS is what `main.py` uses for the live fire map. Each row is a single fire point, with no image around it, so FIRMS cannot be a training input. It can be a label: TS-SatFire, below, builds its training labels from the VIIRS active fire detections that FIRMS publishes.
 
-- **Paper:** [Next Day Wildfire Spread (Huot et al.)](https://arxiv.org/abs/2112.02447)
-- **Download:** [Kaggle: fantineh/next-day-wildfire-spread](https://www.kaggle.com/datasets/fantineh/next-day-wildfire-spread)
-- **Code:** [Google Research loader and export code](https://github.com/google-research/google-research/tree/master/simulation_research/next_day_wildfire_spread)
+## Option 1: Landsat-8 Active Fire
+
+- **Paper:** [Active Fire Detection in Landsat-8 Imagery (Pereira et al., 2021)](https://arxiv.org/abs/2101.03409)
+- **Download and code:** [GitHub: pereira-gha/activefire](https://github.com/pereira-gha/activefire)
 - **License:** CC-BY 4.0
 
 ### Bands
 
-Each sample is a 64 by 64 km patch at 1 km resolution, so every grid is 64 by 64 pixels. There are 12 input grids:
+10 Landsat-8 bands per patch, at 30 m per pixel. Landsat-8 band 8, the 15 m panchromatic band, is left out.
 
-| Name | What it is |
+| Band | What it sees |
 |---|---|
-| `elevation` | Elevation, meters |
-| `th` | Wind direction, degrees clockwise from north |
-| `vs` | Wind speed, meters per second |
-| `tmmn` | Minimum temperature, kelvin |
-| `tmmx` | Maximum temperature, kelvin |
-| `sph` | Specific humidity |
-| `pr` | Precipitation, millimeters |
-| `pdsi` | Palmer Drought Severity Index |
-| `NDVI` | Vegetation index, stored scaled rather than -1 to 1 |
-| `population` | Population density |
-| `erc` | Energy release component, BTU per square foot |
-| `PrevFireMask` | Fire on day t |
+| 1 | Coastal aerosol |
+| 2, 3, 4 | Blue, green, red |
+| 5 | Near-infrared |
+| 6, 7 | Shortwave infrared |
+| 9 | Cirrus cloud |
+| 10, 11 | Thermal infrared |
 
-Most of these are weather, terrain, and population layers rather than satellite spectral bands. Only `NDVI` and the fire masks come from satellites. The dataset has no red, near-infrared, or shortwave infrared bands, so NBR cannot be computed from it.
+Red (4), near-infrared (5), and shortwave infrared (7) give NDVI and NBR. Shortwave infrared is also where a burning fire shows up brightest.
 
 ### Labels
 
-`FireMask` is the fire on day t+1 for the same patch. Each pixel is `1` for fire, `0` for no fire, or `-1` for uncertain, usually because cloud blocked the satellite. The fire masks come from MODIS satellite fire detections.
+A fire mask for every patch: each pixel is fire or no fire. There are two kinds of masks:
+
+- **Algorithm masks** for all patches, made by three established fire detection methods (Schroeder, Murphy, and Kumar-Roy), plus masks where two or all three agree.
+- **Hand-labeled masks** for a separate test set of 9,044 patches. These let us measure the model against people, not against the algorithms it learned from.
 
 ### Size
 
-- 18,545 samples across the contiguous United States, from 2012 to 2020.
-- Split into training, validation, and test sets, about 80, 10, and 10 percent.
-- About 2 GB on Kaggle, as 19 TFRecord files.
+- 146,214 patches of 256 by 256 pixels, from 8,194 Landsat-8 scenes taken worldwide in August and September 2020.
+- About 192 GB of images plus about 22 GB of masks.
+- Split into 11 regions, roughly by continent, so we can download only North America.
 
 ### Does it support our task?
 
-**Yes, for fire prediction.** The input is today's conditions plus today's fire, and the label is tomorrow's fire. That is the question SkyAlert wants to answer, and the coverage is the whole contiguous US, which matches our live map.
-
-We checked this by downloading the first file, `next_day_wildfire_spread_eval_00.tfrecord`, and loading it in `notebooks/ndws.ipynb`. Every sample had the 12 inputs above plus `FireMask`, each a 64 by 64 grid. In sample 1, yesterday had 18 fire pixels and tomorrow had 39. Some of tomorrow's fire was not near any fire from yesterday, so the model has to learn new ignitions, not only spread.
+**Yes.** The input is a satellite image with real spectral bands, the label is active fire in that same image, and the patches are already cut to a size a U-Net can take. The authors trained U-Net models on it. Their best combination found 92.4 percent of the hand-labeled fire pixels, and 87.2 percent of the pixels it marked as fire were real.
 
 Limits:
 
-- At 1 km per pixel, it shows roughly where fire is, not exact fire edges.
-- It is a one-day forecast, not same-day detection from an image.
-- Pixels labeled `-1` must be left out of training and scoring rather than counted as no fire.
-- A few precipitation values are slightly below zero. The authors' code clips them to zero.
+- Most labels come from detection algorithms rather than people, so the model learns their mistakes too. The hand-labeled test set is the honest score.
+- It only covers two months of 2020.
+- Landsat-8 photographs the same place only every 16 days, so a model trained on it can confirm and map fires but cannot watch a fire day to day.
+- Most patches have very few fire pixels, so the model has to be trained to not ignore them.
 
-## Option 2: CaBuAr (California Burned Areas)
+## Option 2: TS-SatFire
 
-- **Paper:** [CaBuAr: California Burned Areas dataset for delineation](https://arxiv.org/abs/2401.11519)
-- **Download:** [Hugging Face: DarthReca/california_burned_areas](https://huggingface.co/datasets/DarthReca/california_burned_areas)
-- **Loader:** [TorchGeo CaBuAr](https://docs.torchgeo.org/en/stable/api/datasets/cabuar.html)
-
-We did not download CaBuAr. The details below come from the paper and the dataset pages.
+- **Paper:** [TS-SatFire (Scientific Data, 2025)](https://www.nature.com/articles/s41597-025-06271-3)
+- **Download:** [Kaggle: z789456sx/ts-satfire](https://www.kaggle.com/datasets/z789456sx/ts-satfire)
+- **Code:** [GitHub: zhaoyutim/TS-SatFire](https://github.com/zhaoyutim/TS-SatFire)
 
 ### Bands
 
-12 Sentinel-2 Level-2A bands, resampled to 20 m per pixel: B01, B02, B03, B04, B05, B06, B07, B08, B8A, B09, B11, and B12.
+Six VIIRS bands. VIIRS is the same sensor behind the FIRMS feed in `main.py`.
 
-These include red (B04), near-infrared (B08 or B8A), and shortwave infrared (B12), so both engineered features can be computed:
+| Band | What it sees | Pixel size |
+|---|---|---|
+| I1 | Red | 375 m |
+| I2 | Near-infrared | 375 m |
+| I3 | Shortwave infrared | 375 m |
+| I4 | Mid-infrared, where fire heat peaks | 375 m |
+| I5 | Thermal infrared | 375 m |
+| M11 | Shortwave infrared | 750 m |
 
-- NDVI = (NIR − Red) / (NIR + Red)
-- NBR = (NIR − SWIR) / (NIR + SWIR)
-
-When a pre-fire image is present, dNBR = NBR before − NBR after measures how badly each pixel burned.
+Red (I1), near-infrared (I2), and shortwave infrared (M11) give NDVI and NBR. Each fire has daytime and nighttime images. The dataset also includes weather, terrain, land cover, and fuel layers, but the detection task uses the satellite bands.
 
 ### Labels
 
-A binary mask for each post-fire image: `1` for burned area and `0` for no change. The masks are drawn from fire perimeters published by the California Department of Forestry and Fire Protection.
+Each image has two masks, one for active fire and one for burned area.
+
+- **Training labels** for active fire come from the NASA VIIRS active fire product, which FIRMS serves. The authors checked them by eye and removed areas where the labels did not match the bright spots in the image.
+- **Test labels** were drawn by hand for 17 fires around the world.
 
 ### Size
 
-- 340 Sentinel-2 scenes of 5490 by 5490 pixels, covering California fires from 2015 to 2022.
-- The ready-made version is 424 pairs of 512 by 512 patches, each with a pre-fire image, a post-fire image, and a mask.
-- The data is stored as HDF5 files, with five folds plus a separate test set from the ChaBuD 2023 challenge.
+- 179 wildfires, mostly in the contiguous US, from January 2017 to October 2021.
+- 3,552 images, following each fire from start to finish, as GeoTIFF files.
+- About 71 GB in total.
 
 ### Does it support our task?
 
-**Not for fire prediction. Yes for burned-area mapping.** The label is land that has already burned, not where fire will be next, so it cannot train the main SkyAlert model. It does fit the second phase: a U-Net that outlines burned land, using NDVI and NBR as features.
+**Yes, with a resolution trade-off.** The inputs are real spectral bands, the labels are active fire in the same image, and the fires are in the US. It uses the same satellite as our live map, so a model trained on it could later run on fresh VIIRS images, which arrive twice a day.
 
 Limits:
 
-- It covers California only, so a model trained on it may not transfer to the vegetation in other states.
-- The ready-made 512 by 512 patches only include patches with at least one burned pixel. A fire or no-fire classifier would need unburned patches cut from the full scenes.
-- Some events have no pre-fire image, so dNBR is not available for every sample.
+- A 375 m pixel is about 12 Landsat pixels across, so fire edges are coarse.
+- The authors found that image-only models like U-Net did worse at active fire detection than models that also see earlier images of the same place, because fire pixels are so sparse at this resolution.
+- Only 179 fires, and the files are organized by fire and date, not as ready-made patches.
 
 ## Recommendation
 
-**Use Next Day Wildfire Spread to train the fire prediction model.** It is the only option whose labels answer our main question, it covers the whole contiguous US, and we have confirmed its structure by loading it.
+**Train the fire detector on Landsat-8 Active Fire.** It matches the plan most directly: real spectral bands, active fire labels in the same image, ready-made 256 by 256 patches for the ResNet and U-Net, enough bands for NDVI and NBR, and a hand-labeled test set for an honest score. We can start with the North America region instead of the full 192 GB.
 
-**Keep CaBuAr for the burned-area phase.** It has the spectral bands needed for NDVI and NBR and pixel-level burn labels, which Next Day Wildfire Spread does not provide.
+**Keep TS-SatFire as the next step** if we want the detector to run on the same twice-daily VIIRS images that feed our live map. It would need models that also look at earlier images of the same place.
 
-**Keep FIRMS as the live map** of fires burning now.
+We did not download either dataset. The numbers above come from the papers and dataset pages.
+
+### Other datasets considered
+
+- **Next Day Wildfire Spread** forecasts tomorrow's fire rather than detecting today's, and 10 of its 12 inputs are weather, terrain, and population layers. We inspected it in `notebooks/ndws.ipynb` before ruling it out.
+- **WildfireSpreadTS** has some VIIRS reflectance bands, but it also forecasts tomorrow's fire rather than detecting today's.
+- **CaBuAr** labels land that has already burned, not active fire. It may be useful for a later burned-area phase.
 
 ## How we will evaluate
 
@@ -119,8 +130,7 @@ For each pixel the model predicts fire or no fire, and we compare that with the 
 
 - **Correct fire:** the model and the label both say fire.
 - **False alarm:** the model says fire and the label says no fire. Responders would be sent somewhere that is not burning.
-- **Miss:** the label says fire and the model says no fire. A real fire goes unwarned.
-- Pixels labeled `-1` (uncertain) are skipped.
+- **Miss:** the label says fire and the model says no fire. A real fire goes unreported.
 
 We will report:
 
@@ -128,4 +138,6 @@ We will report:
 - **Recall:** the share of real fire pixels the model caught. A miss is the more dangerous error for first responders, so recall is reported alongside IoU rather than replaced by it.
 - **Precision:** the share of predicted fire pixels that were real. This tracks false alarms.
 
-Overall accuracy is not a useful score here. Most pixels are not on fire, so a model that always predicts no fire would look accurate while missing every fire.
+Overall accuracy is not a useful score here. Almost every pixel is not on fire, so a model that always says no fire would look accurate while missing every fire.
+
+Scores on the hand-labeled test set count. Scores on algorithm-made labels only show how well the model copies those algorithms.

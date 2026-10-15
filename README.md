@@ -52,9 +52,9 @@ SkyAlert is a computer vision system for detecting wildfires and floods from sat
 
 ## Training Data
 
-`docs/dataset_options.md` compares candidate training datasets and recommends Next Day Wildfire Spread for fire prediction.
+`docs/dataset_options.md` compares candidate training datasets and recommends Landsat-8 Active Fire for fire detection.
 
-`notebooks/ndws.ipynb` loads a sample of Next Day Wildfire Spread and shows its inputs, labels, and fire masks. On first run it downloads one 120 MB file into `data/ndws/`, which is not committed. Select the `.venv` kernel and run all cells. To print the same tables in the terminal instead:
+`notebooks/ndws.ipynb` loads a sample of Next Day Wildfire Spread, a forecasting dataset we inspected and ruled out, and shows its inputs, labels, and fire masks. On first run it downloads one 120 MB file into `data/ndws/`, which is not committed. Select the `.venv` kernel and run all cells. To print the same tables in the terminal instead:
 
 ```bash
 python notebooks/inspect_ndws.py
