@@ -1,9 +1,10 @@
 import pandas as pd
+from pathlib import Path
 
 REQUIRED_COLUMNS = ["latitude", "longitude", "acq_date", "acq_time", "satellite", "confidence", "frp", "bright_ti4"]
 DUPLICATE_KEY = ["latitude", "longitude", "acq_date", "acq_time", "satellite"]
 
-def clean_viirs(df):
+def clean_viirs(raw_df):
     """
     Cleans the VIIRS fire data by performing the following steps:
     1. Checks if the required columns are present in the dataframe.
@@ -14,8 +15,8 @@ def clean_viirs(df):
     6. Returns the cleaned dataframe.
 
     """
+    df = raw_df.copy()  # Create a copy of the dataframe to avoid modifying the original
     n = len(df)
-    df = df.copy()  # Create a copy of the dataframe to avoid modifying the original
 
     #quits if required columns are not present in the dataframe
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
@@ -49,7 +50,8 @@ def clean_viirs(df):
 
 if __name__ == "__main__":
     #import data to data variable from sample.csv file
-    data = pd.read_csv('sample.csv', dtype={"acq_time": str})
+    csv_path = Path(__file__).parent.parent / "sample.csv"
+    data = pd.read_csv(csv_path, dtype={"acq_time": str})
     #load into dataframe
     data_frame = pd.DataFrame(data)
     cleaned_data = clean_viirs(data_frame)
