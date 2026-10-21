@@ -116,7 +116,7 @@ Limits:
 
 **Keep TS-SatFire as the next step** if we want the detector to run on the same twice-daily VIIRS images that feed our live map. It would need models that also look at earlier images of the same place.
 
-We did not download either dataset. The numbers above come from the papers and dataset pages.
+The numbers above come from the papers and dataset pages. We downloaded the authors' 231 MB sample (100 patches) into `data/landsat8/`, which is not committed. The regional archives, 2 GB to 34 GB each, were left alone.
 
 ### Other datasets considered
 

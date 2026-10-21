@@ -60,15 +60,23 @@ SkyAlert is a computer vision system for detecting wildfires and floods from sat
 python notebooks/inspect_ndws.py
 ```
 
+`notebooks/landsat.ipynb` loads the Landsat-8 Active Fire sample, not a continent archive. On first run it downloads a 231 MB zip into `data/landsat8/`, which is not committed, and shows five image-and-mask pairs with their dimensions and band names. Select the `.venv` kernel and run all cells. To print the same tables in the terminal instead:
+
+```bash
+python notebooks/inspect_landsat.py
+```
+
 ## Project Layout
 
 ```
-main.py                     FIRMS live fire map, writes fires.html
-notebooks/fires.ipynb       FIRMS data exploration
-notebooks/ndws.ipynb        Next Day Wildfire Spread exploration
-notebooks/inspect_ndws.py   Download and parse helper for ndws.ipynb
-docs/dataset_options.md     Training dataset comparison
-data/                       Downloaded datasets, not committed
+main.py                       FIRMS live fire map, writes fires.html
+notebooks/fires.ipynb         FIRMS data exploration
+notebooks/ndws.ipynb          Next Day Wildfire Spread exploration
+notebooks/inspect_ndws.py     Download and parse helper for ndws.ipynb
+notebooks/landsat.ipynb       Landsat-8 Active Fire sample
+notebooks/inspect_landsat.py  Download and parse helper for landsat.ipynb
+docs/dataset_options.md       Training dataset comparison
+data/                         Downloaded datasets, not committed
 ```
 
 ## Docker Setup
