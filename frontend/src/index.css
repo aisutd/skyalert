@@ -22,6 +22,8 @@
 
   --switch-off: #d5d8de;
   --map-placeholder: #e8e6e1;
+  --control-hover: #f4f5f7;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Analytics page */
   --page-bg: #f6f7f9;
@@ -58,6 +60,7 @@
 
   --switch-off: #3a3e4a;
   --map-placeholder: #1b1e26;
+  --control-hover: #262a34;
 
   --page-bg: #101217;
   --surface: #181b22;
@@ -150,7 +153,43 @@ body {
 
 /* ---------- Map + stat cards ---------- */
 .map-area { position: relative; flex: 1; min-width: 0; }
-.map-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--map-placeholder); }
+.fire-map { position: absolute; inset: 0; }
+/* z-index: 0 keeps Leaflet's own layers (z-index up to 700) below the stat cards and controls */
+.fire-map-canvas { position: absolute; inset: 0; z-index: 0; background: var(--map-placeholder); font-family: inherit; }
+/* Ring around the selected fire dot */
+.fire-ring { stroke: var(--accent); }
+.fire-map-canvas .leaflet-interactive:focus { outline: none; }
+.fire-map-canvas .leaflet-interactive:focus-visible { stroke: #fff; stroke-width: 4; stroke-opacity: 1; }
+
+/* Map controls (layer switch, sound, zoom) look like the stat cards */
+.map-control {
+  background: var(--card-bg); color: var(--card-text);
+  border: 1px solid var(--card-border); border-radius: 6px;
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+  z-index: 1000; /* above the Leaflet map panes */
+}
+.layer-toggle {
+  position: absolute; top: 16px; right: 16px;
+  display: grid; gap: 2px; padding: 10px 14px 10px 10px;
+  font-size: 13px;
+}
+.layer-toggle label { display: flex; align-items: center; gap: 6px; padding: 3px 0; cursor: pointer; }
+.layer-toggle input { accent-color: var(--accent); margin: 0 0 0 2px; cursor: pointer; }
+.map-controls-bottom {
+  position: absolute; right: 16px; bottom: 16px; z-index: 1000;
+  display: grid; gap: 10px;
+}
+.map-button {
+  display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
+  border: 0; border-bottom: 1px solid var(--card-border); background: transparent;
+  color: var(--card-text); cursor: pointer;
+}
+.map-button:last-child { border-bottom: none; }
+.map-button:hover:not(:disabled) { background: var(--control-hover); color: var(--accent); }
+.map-button:disabled { color: var(--card-muted); opacity: 0.5; cursor: default; }
+.map-button[aria-pressed="true"] { color: var(--accent); }
 
 /* Cards float over the top-left of the map (the map's own controls are on the right) */
 .stat-cards {
@@ -177,6 +216,87 @@ body {
 .stat-head { display: flex; align-items: baseline; gap: 8px; }
 .stat-detail { font-size: 11px; color: var(--card-muted); white-space: nowrap; }
 .stat-error { color: var(--error); font-size: 13px; }
+
+/* ---------- Fire popup (FirePopup.jsx) ---------- */
+.fire-popup {
+  --risk-low: #2f9e6b; --risk-moderate: #d99a00; --risk-high: #f26b1d; --risk-critical: #e5483a;
+  position: absolute; top: 0; left: 0; z-index: 1001;
+  display: flex; flex-direction: column;
+  padding: 14px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--card-border); border-radius: 10px;
+  box-shadow: var(--card-shadow);
+  font-size: 13px; line-height: 1.4;
+  outline: none;
+  animation: popup-in 0.16s ease;
+}
+:root[data-theme="dark"] .fire-popup { --risk-low: #3ecf8e; --risk-moderate: #f5c542; --risk-high: #ff8a3d; --risk-critical: #ff6a5a; }
+@keyframes popup-in { from { opacity: 0; } to { opacity: 1; } }
+.fire-popup :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.popup-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.popup-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.popup-close {
+  display: grid; place-items: center; width: 28px; height: 28px;
+  border: 1px solid var(--card-border); border-radius: 8px;
+  background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.popup-close:hover { color: var(--accent); border-color: var(--accent); }
+.popup-body { overflow-y: auto; min-height: 0; margin: 0 -14px; padding: 0 14px 2px; scrollbar-width: thin; }
+.popup-item + .popup-item { margin-top: 12px; }
+
+.popup-title { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.25; }
+.popup-coords { margin-top: 3px; font-family: var(--mono); font-size: 11.5px; color: var(--text-muted); white-space: pre; }
+.popup-mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.popup-muted { color: var(--text-muted); }
+.popup-label { font-size: 11px; color: var(--text-muted); }
+.popup-section-title {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 7px;
+}
+
+/* Risk row: outlined, orange number, small dot in the risk colour */
+.popup-risk {
+  --risk: var(--risk-low);
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 12px;
+  padding: 10px 12px; border-radius: 7px; border: 1px solid var(--card-border);
+}
+.popup-risk[data-risk="moderate"] { --risk: var(--risk-moderate); }
+.popup-risk[data-risk="high"] { --risk: var(--risk-high); }
+.popup-risk[data-risk="critical"] { --risk: var(--risk-critical); }
+.popup-risk-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--risk); }
+.popup-risk-level { font-size: 15px; font-weight: 600; }
+.popup-risk-index { text-align: right; font-size: 18px; font-weight: 500; color: var(--accent); }
+.popup-risk-max { font-size: 11px; color: var(--text-muted); margin-left: 1px; }
+.popup-meter { grid-column: 1 / -1; height: 5px; border-radius: 99px; background: var(--pill-bg); overflow: hidden; margin-top: 6px; }
+.popup-meter span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+
+/* Stat tiles */
+.popup-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.fire-popup.compact .popup-stats { grid-template-columns: repeat(2, 1fr); }
+.popup-stat { padding: 8px 9px; border-radius: 6px; border: 1px solid var(--card-border); min-width: 0; }
+.popup-stat-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.popup-stat-tag { font-size: 11px; font-weight: 600; color: var(--accent); }
+.popup-stat-value { font-size: 13px; font-weight: 500; margin-top: 2px; white-space: nowrap; }
+.popup-stat-value.accent { color: var(--accent); }
+.popup-stat-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Regional analysis button: outlined orange */
+.popup-analysis {
+  width: 100%; padding: 9px 14px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--accent); background: transparent;
+  color: var(--accent); font: inherit; font-weight: 600; font-size: 13px;
+}
+.popup-analysis:hover { background: var(--accent); color: #fff; }
+
+/* Loading placeholders */
+.popup-skel { display: block; height: 12px; border-radius: 6px; margin: 4px 0; background: var(--pill-bg); animation: popup-pulse 1.3s ease-in-out infinite; }
+.popup-title .popup-skel { height: 18px; }
+@keyframes popup-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .fire-popup, .popup-skel { animation: none; }
+}
 
 [hidden] { display: none !important; }
 

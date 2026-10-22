@@ -24,19 +24,9 @@ const DISTANCE_COLUMN = {
   render: (f) => f.distance.toFixed(1),
 }
 
-// VIIRS gives confidence as a letter. "rank" lets us sort it in a sensible order
-// (low < nominal < high) instead of alphabetically.
-const CONFIDENCE = {
-  l: { label: 'Low', rank: 1 },
-  n: { label: 'Nominal', rank: 2 },
-  h: { label: 'High', rank: 3 },
-}
-
-// acq_time is a number like 815 meaning 08:15 UTC; turn it into "08:15"
-function formatTime(acqTime) {
-  const padded = String(acqTime).padStart(4, '0')
-  return `${padded.slice(0, 2)}:${padded.slice(2)}`
-}
+// VIIRS gives confidence as a letter (the readable label comes from /api/fires).
+// The rank lets us sort it low < nominal < high instead of alphabetically.
+const CONFIDENCE_RANK = { l: 1, n: 2, h: 3 }
 
 // One entry per table column.
 //   sortValue: what to compare when sorting by this column
@@ -45,10 +35,10 @@ const COLUMNS = [
   {
     key: 'detected',
     label: 'Detected (UTC)',
-    sortValue: (f) => `${f.acq_date} ${formatTime(f.acq_time)}`,
+    sortValue: (f) => `${f.acq_date} ${f.acq_time_utc}`,
     render: (f) => (
       <>
-        {f.acq_date} <span className="muted">{formatTime(f.acq_time)}</span>
+        {f.acq_date} <span className="muted">{f.acq_time_utc}</span>
       </>
     ),
   },
@@ -72,9 +62,9 @@ const COLUMNS = [
     key: 'confidence',
     label: 'Confidence',
     hint: 'How sure NASA is that this is a real fire',
-    sortValue: (f) => CONFIDENCE[f.confidence]?.rank ?? 0,
+    sortValue: (f) => CONFIDENCE_RANK[f.confidence] ?? 0,
     render: (f) => (
-      <span className={`pill pill-${f.confidence}`}>{CONFIDENCE[f.confidence]?.label ?? f.confidence}</span>
+      <span className={`pill pill-${f.confidence}`}>{f.confidence_label}</span>
     ),
   },
   {
@@ -109,25 +99,13 @@ function Kpi({ label, value }) {
   )
 }
 
+// fires: every detection from /api/fires (App loads it once and shares it with the map)
 // focus: { lat, lon, label } when opened from a fire on the map, otherwise null
-export default function AnalyticsPage({ focus, onClearFocus }) {
-  const [fires, setFires] = useState(null)
-  const [error, setError] = useState(null)
+export default function AnalyticsPage({ fires, error, focus, onClearFocus }) {
   // Strongest fires first by default; nearest first when focused on a region
   const [sort, setSort] = useState(focus ? { key: 'distance', direction: 'asc' } : { key: 'frp', direction: 'desc' })
   const [confidenceFilter, setConfidenceFilter] = useState('all')
   const [page, setPage] = useState(0)
-
-  // Load every detection from dashboard.py when the page opens
-  useEffect(() => {
-    fetch('/api/fires')
-      .then((res) => {
-        if (!res.ok) throw new Error(`Server returned ${res.status}`)
-        return res.json()
-      })
-      .then(setFires)
-      .catch((err) => setError(err.message))
-  }, [])
 
   // When focused on a region: keep only detections near the clicked fire, with their distance
   const baseFires = useMemo(() => {
