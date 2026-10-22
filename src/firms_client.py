@@ -21,7 +21,7 @@ VIIRS_COLUMNS = [
 class FirmsError(Exception):
     """Raised when FIRMS data can't be fetched."""
 
-
+# get env stuff
 def get_map_key():
     """Read the FIRMS map key from the .env file or the environment."""
     load_dotenv()
