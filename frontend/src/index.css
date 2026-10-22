@@ -163,18 +163,19 @@ body {
   display: flex; align-items: flex-start; gap: 12px;
   min-width: 180px; padding: 12px 16px 12px 12px;
   background: var(--card-bg); color: var(--card-text);
-  border: 1px solid var(--card-border); border-radius: 12px;
+  border: 1px solid var(--card-border); border-radius: 6px;
   box-shadow: var(--card-shadow);
   backdrop-filter: blur(6px);
 }
 .stat-icon {
-  width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+  width: 34px; height: 34px; border-radius: 5px; flex-shrink: 0;
   display: grid; place-items: center;
   background: var(--accent-soft); color: var(--accent);
 }
 .stat-label { font-size: 12px; font-weight: 500; color: var(--card-muted); }
 .stat-value { font-size: 17px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.stat-detail { font-size: 11px; color: var(--card-muted); margin-top: 2px; }
+.stat-head { display: flex; align-items: baseline; gap: 8px; }
+.stat-detail { font-size: 11px; color: var(--card-muted); white-space: nowrap; }
 .stat-error { color: var(--error); font-size: 13px; }
 
 [hidden] { display: none !important; }
@@ -260,3 +261,17 @@ th.num .sort-button { flex-direction: row-reverse; } /* arrow on the left for ri
   .stat-card { min-width: 0; }
   .page { padding: 20px 16px; }
 }
+
+/* "Within 50 km of …" chip on the Analytics page (when opened from a fire on the map) */
+.region-chip {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 12px;
+  padding: 6px 6px 6px 12px; border-radius: 999px; font-size: 13px;
+  background: var(--accent-soft); color: var(--text); border: 1px solid var(--accent);
+}
+.region-chip svg { color: var(--accent); }
+.region-chip button {
+  display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  border: 0; background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.region-chip button:hover { background: var(--row-hover); color: var(--text); }
+.region-chip button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

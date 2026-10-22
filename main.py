@@ -28,6 +28,7 @@ OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fires.ht
 
 def fetch_fires():
     """Download the latest fire detections for the US from NASA FIRMS as a dataframe."""
+    # EXTERNAL API: NASA FIRMS. Returns the satellite fire detections (VIIRS) as CSV: location, brightness, FRP, confidence, date/time. Needs the FIRMS_MAP_KEY from .env
     url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{MAP_KEY}/{FIRMS_SOURCE}/{US_BOUNDS}/{DAY_RANGE}"
     response = requests.get(url, timeout=60)
     print("Status code:", response.status_code)

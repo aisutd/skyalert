@@ -1,7 +1,28 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Moon, Sun } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, MapPin, Moon, Sun, X } from 'lucide-react'
 
 const ROWS_PER_PAGE = 50
+// "Open regional analysis" on the map shows detections within this distance of the clicked fire
+const REGION_RADIUS_KM = 50
+
+// Straight-line distance between two points on Earth (haversine formula), in km
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const toRad = (d) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return 6371 * 2 * Math.asin(Math.sqrt(a))
+}
+
+// Extra first column, only shown when the page is focused on one fire's region
+const DISTANCE_COLUMN = {
+  key: 'distance',
+  label: 'Distance (km)',
+  hint: 'How far this detection is from the fire you clicked on the map',
+  numeric: true,
+  sortValue: (f) => f.distance,
+  render: (f) => f.distance.toFixed(1),
+}
 
 // VIIRS gives confidence as a letter. "rank" lets us sort it in a sensible order
 // (low < nominal < high) instead of alphabetically.
@@ -88,11 +109,12 @@ function Kpi({ label, value }) {
   )
 }
 
-export default function AnalyticsPage() {
+// focus: { lat, lon, label } when opened from a fire on the map, otherwise null
+export default function AnalyticsPage({ focus, onClearFocus }) {
   const [fires, setFires] = useState(null)
   const [error, setError] = useState(null)
-  // Strongest fires first by default
-  const [sort, setSort] = useState({ key: 'frp', direction: 'desc' })
+  // Strongest fires first by default; nearest first when focused on a region
+  const [sort, setSort] = useState(focus ? { key: 'distance', direction: 'asc' } : { key: 'frp', direction: 'desc' })
   const [confidenceFilter, setConfidenceFilter] = useState('all')
   const [page, setPage] = useState(0)
 
@@ -107,12 +129,28 @@ export default function AnalyticsPage() {
       .catch((err) => setError(err.message))
   }, [])
 
+  // When focused on a region: keep only detections near the clicked fire, with their distance
+  const baseFires = useMemo(() => {
+    if (!fires || !focus) return fires
+    return fires
+      .map((f) => ({ ...f, distance: distanceKm(focus.lat, focus.lon, f.latitude, f.longitude) }))
+      .filter((f) => f.distance <= REGION_RADIUS_KM)
+  }, [fires, focus])
+
+  // useMemo keeps the same array between renders, so the sort below doesn't re-run for nothing
+  const columns = useMemo(() => (focus ? [DISTANCE_COLUMN, ...COLUMNS] : COLUMNS), [focus])
+
+  // If the region is cleared while sorted by distance, go back to the default sort
+  useEffect(() => {
+    if (!focus && sort.key === 'distance') setSort({ key: 'frp', direction: 'desc' })
+  }, [focus, sort.key])
+
   // Filter, then sort. useMemo means this only re-runs when the data, filter or
   // sort changes, not on every render.
   const rows = useMemo(() => {
-    if (!fires) return []
-    const filtered = confidenceFilter === 'all' ? fires : fires.filter((f) => f.confidence === confidenceFilter)
-    const column = COLUMNS.find((c) => c.key === sort.key)
+    if (!baseFires) return []
+    const filtered = confidenceFilter === 'all' ? baseFires : baseFires.filter((f) => f.confidence === confidenceFilter)
+    const column = columns.find((c) => c.key === sort.key) ?? COLUMNS[1]
     const flip = sort.direction === 'asc' ? 1 : -1
     // [...filtered] copies the array, because .sort() changes the array it's called on
     return [...filtered].sort((a, b) => {
@@ -120,7 +158,7 @@ export default function AnalyticsPage() {
       const y = column.sortValue(b)
       return (x < y ? -1 : x > y ? 1 : 0) * flip
     })
-  }, [fires, confidenceFilter, sort])
+  }, [baseFires, confidenceFilter, sort, columns])
 
   // Clicking a header sorts by it; clicking the same header again flips the order
   const handleSort = (column) => {
@@ -145,24 +183,41 @@ export default function AnalyticsPage() {
   const firstShown = rows.length ? page * ROWS_PER_PAGE + 1 : 0
   const lastShown = Math.min((page + 1) * ROWS_PER_PAGE, rows.length)
 
-  // Numbers for the tiles (always across all detections, not just the filter)
-  const highCount = fires.filter((f) => f.confidence === 'h').length
-  const frpValues = fires.map((f) => f.frp)
+  // Numbers for the tiles: all detections, or just the region's when focused
+  // (the confidence filter doesn't change them)
+  const highCount = baseFires.filter((f) => f.confidence === 'h').length
+  const frpValues = baseFires.map((f) => f.frp)
   const maxFrp = frpValues.length ? Math.max(...frpValues) : 0
   const avgFrp = frpValues.length ? frpValues.reduce((sum, v) => sum + v, 0) / frpValues.length : 0
 
   // How many rows each filter button would show
-  const countFor = (id) => (id === 'all' ? fires.length : fires.filter((f) => f.confidence === id).length)
+  const countFor = (id) => (id === 'all' ? baseFires.length : baseFires.filter((f) => f.confidence === id).length)
 
   return (
     <div className="page">
       <header className="page-header">
         <h1>Analytics</h1>
-        <p className="muted">Every fire detection from the last few days. Click a column header to sort.</p>
+        <p className="muted">
+          {focus
+            ? `Detections within ${REGION_RADIUS_KM} km of the fire you selected on the map.`
+            : 'Every fire detection from the last few days.'}{' '}
+          Click a column header to sort.
+        </p>
+        {focus && (
+          <div className="region-chip">
+            <MapPin size={14} />
+            <span>
+              Within {REGION_RADIUS_KM} km of <strong>{focus.label}</strong>
+            </span>
+            <button onClick={onClearFocus} aria-label="Show all detections" title="Show all detections">
+              <X size={14} />
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="kpis">
-        <Kpi label="Detections" value={fires.length.toLocaleString()} />
+        <Kpi label="Detections" value={baseFires.length.toLocaleString()} />
         <Kpi label="High confidence" value={highCount.toLocaleString()} />
         <Kpi label="Strongest fire (FRP)" value={`${maxFrp.toFixed(1)} MW`} />
         <Kpi label="Average FRP" value={`${avgFrp.toFixed(1)} MW`} />
@@ -191,7 +246,7 @@ export default function AnalyticsPage() {
           <table className="fire-table">
             <thead>
               <tr>
-                {COLUMNS.map((column) => {
+                {columns.map((column) => {
                   const active = sort.key === column.key
                   const Arrow = !active ? ArrowUpDown : sort.direction === 'asc' ? ArrowUp : ArrowDown
                   return (
@@ -212,7 +267,7 @@ export default function AnalyticsPage() {
             <tbody>
               {pageRows.map((fire) => (
                 <tr key={fire.id}>
-                  {COLUMNS.map((column) => (
+                  {columns.map((column) => (
                     <td key={column.key} className={column.numeric ? 'num' : ''}>
                       {column.render(fire)}
                     </td>
@@ -221,7 +276,7 @@ export default function AnalyticsPage() {
               ))}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={COLUMNS.length} className="empty">No detections match this filter.</td>
+                  <td colSpan={columns.length} className="empty">No detections match this filter.</td>
                 </tr>
               )}
             </tbody>

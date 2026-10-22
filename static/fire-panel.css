@@ -1,0 +1,151 @@
+/*
+ * SkyAlert fire information panel (see fire-panel.js).
+ *
+ * A flat card that matches the map's other controls. It reads the --ctl-* colours
+ * and --accent that dashboard.py sets, so it follows the light/dark theme.
+ * .fp-root[data-state] is closed | open | closing and only drives a quick fade.
+ */
+.fp-root {
+  --fp-bg: var(--ctl-bg, #ffffff);
+  --fp-text: var(--ctl-text, #1b1d22);
+  --fp-muted: var(--ctl-muted, #6b7080);
+  --fp-border: var(--ctl-border, rgba(20, 22, 28, 0.10));
+  --fp-shadow: var(--ctl-shadow, 0 4px 16px rgba(20, 22, 28, 0.12));
+  --fp-accent: var(--accent, #f26b1d);
+  --fp-track: #eceef2;
+  --fp-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --risk-low: #2f9e6b;
+  --risk-moderate: #d99a00;
+  --risk-high: #f26b1d;
+  --risk-critical: #e5483a;
+}
+html[data-theme='dark'] .fp-root {
+  --fp-track: #2d313c;
+  --risk-low: #3ecf8e;
+  --risk-moderate: #f5c542;
+  --risk-high: #ff8a3d;
+  --risk-critical: #ff6a5a;
+}
+
+/* ---------- the panel ---------- */
+.fp-panel {
+  position: absolute; top: 0; left: 0; z-index: 1001;
+  display: flex; flex-direction: column;
+  background: var(--fp-bg);
+  color: var(--fp-text);
+  border: 1px solid var(--fp-border);
+  border-radius: 10px;
+  box-shadow: var(--fp-shadow);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 13px; line-height: 1.4;
+  outline: none;
+  cursor: default;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+.fp-panel[hidden] { display: none; }
+.fp-root[data-state='open'] .fp-panel { opacity: 1; }
+/* Sliding to a newly selected fire */
+.fp-panel.is-moving { transition: opacity 0.16s ease, transform 0.3s ease, width 0.2s ease; }
+
+.fp-content { display: flex; flex-direction: column; min-height: 0; padding: 14px; }
+.fp-body { overflow-y: auto; min-height: 0; margin: 0 -14px; padding: 0 14px 2px; scrollbar-width: thin; scrollbar-color: var(--fp-border) transparent; }
+
+.fp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.fp-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fp-accent); }
+.fp-close {
+  display: grid; place-items: center; width: 28px; height: 28px;
+  border: 1px solid var(--fp-border); border-radius: 8px;
+  background: transparent; color: var(--fp-muted); cursor: pointer;
+}
+.fp-close svg { stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.fp-close:hover { color: var(--fp-accent); border-color: var(--fp-accent); }
+
+.fp-item + .fp-item { margin-top: 12px; }
+
+/* ---------- content styles ---------- */
+.fp-title { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.25; }
+.fp-coords { margin-top: 3px; font-family: var(--fp-mono); font-size: 11.5px; color: var(--fp-muted); white-space: pre; }
+.fp-mono { font-family: var(--fp-mono); font-variant-numeric: tabular-nums; }
+.fp-muted { color: var(--fp-muted); margin: 0; }
+.fp-label { font-size: 11px; color: var(--fp-muted); }
+.fp-section-title {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--fp-muted); margin-bottom: 7px;
+}
+
+/* Risk indicator: outlined row, orange number, small dot in the risk colour */
+.fp-risk {
+  --risk: var(--risk-low);
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 12px;
+  padding: 10px 12px; border-radius: 7px;
+  border: 1px solid var(--fp-border);
+}
+.fp-risk[data-risk='moderate'] { --risk: var(--risk-moderate); }
+.fp-risk[data-risk='high'] { --risk: var(--risk-high); }
+.fp-risk[data-risk='critical'] { --risk: var(--risk-critical); }
+.fp-risk__dot { width: 10px; height: 10px; border-radius: 50%; background: var(--risk); }
+.fp-risk__level { font-size: 15px; font-weight: 600; }
+.fp-risk__index { text-align: right; font-size: 18px; font-weight: 500; color: var(--fp-accent); }
+.fp-risk__max { font-size: 11px; color: var(--fp-muted); margin-left: 1px; }
+.fp-meter { grid-column: 1 / -1; height: 5px; border-radius: 99px; background: var(--fp-track); overflow: hidden; margin-top: 6px; }
+.fp-meter span { display: block; height: 100%; border-radius: inherit; background: var(--fp-accent); }
+
+/* Stat tiles */
+.fp-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.fp-stats--3 { grid-template-columns: repeat(3, 1fr); }
+.fp-stat { padding: 8px 9px; border-radius: 6px; border: 1px solid var(--fp-border); min-width: 0; }
+.fp-stat__value { font-size: 13px; font-weight: 500; margin-top: 2px; white-space: nowrap; }
+.fp-stat__value--accent { color: var(--fp-accent); }
+.fp-stat__head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.fp-stat__tag { font-size: 11px; font-weight: 600; color: var(--fp-accent); }
+.fp-stat__sub { font-size: 11px; color: var(--fp-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Regional analysis button: outlined orange */
+.fp-analysis {
+  width: 100%; padding: 9px 14px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--fp-accent); background: transparent;
+  color: var(--fp-accent); font: inherit; font-weight: 600; font-size: 13px;
+}
+.fp-analysis:hover:not(:disabled) { background: var(--fp-accent); color: #fff; }
+.fp-analysis:disabled { opacity: 0.4; cursor: default; }
+
+/* Loading placeholders */
+.fp-skel { display: block; height: 12px; border-radius: 6px; margin: 4px 0; background: var(--fp-track); animation: fp-pulse 1.3s ease-in-out infinite; }
+.fp-title .fp-skel { height: 18px; }
+@keyframes fp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+/* Keyboard focus */
+.fp-panel :focus-visible { outline: 2px solid var(--fp-accent); outline-offset: 2px; }
+.leaflet-interactive:focus { outline: none; }
+.leaflet-interactive:focus-visible { stroke: #fff; stroke-width: 4; stroke-opacity: 1; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Docked bottom sheet on narrow maps */
+.fp-panel.is-compact .fp-stats { grid-template-columns: repeat(2, 1fr); }
+
+/* ---------- ring on the selected dot ---------- */
+.fp-ring { pointer-events: none; }
+.fp-ring > span {
+  position: absolute; left: 0; top: 0; width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--accent, #f26b1d); transform: translate(-50%, -50%);
+  opacity: 0;
+}
+.fp-ring.is-active > span { opacity: 1; }
+
+/* ---------- sound toggle (above the zoom buttons) ---------- */
+html .fp-sound .fp-sound__btn {
+  display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
+  border: 0; background: transparent; color: var(--ctl-text, #222); cursor: pointer;
+}
+html .fp-sound .fp-sound__btn:hover { background: var(--ctl-hover, #f4f4f4); color: var(--accent, #f26b1d); }
+.fp-sound__btn svg path:first-child { fill: currentColor; }
+.fp-sound__btn svg path { stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.fp-sound__btn[aria-pressed='true'] { color: var(--accent, #f26b1d) !important; }
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .fp-panel, .fp-panel.is-moving { transition: none; }
+  .fp-skel { animation: none; }
+}

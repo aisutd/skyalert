@@ -19,23 +19,27 @@ function StatCard({ icon: Icon, label, value, detail }) {
         <Icon size={18} strokeWidth={2} />
       </div>
       <div>
-        <div className="stat-label">{label}</div>
+        <div className="stat-head">
+          <div className="stat-label">{label}</div>
+          {detail && <div className="stat-detail">{detail}</div>}
+        </div>
         <div className="stat-value">{value}</div>
-        {detail && <div className="stat-detail">{detail}</div>}
       </div>
     </div>
   )
 }
 
-export default function StatCards({ summary, error }) {
+// ref (React 19 lets function components take it as a normal prop) lets App
+// measure the cards, so the map's fire panel can stay out from under them
+export default function StatCards({ summary, error, ref }) {
   if (error) {
-    return <div className="stat-cards"><div className="stat-card stat-error">Couldn't load stats: {error}</div></div>
+    return <div className="stat-cards" ref={ref}><div className="stat-card stat-error">Couldn't load stats: {error}</div></div>
   }
 
   // While loading, show the cards with "…" so the layout doesn't jump
   const loading = !summary
   return (
-    <div className="stat-cards">
+    <div className="stat-cards" ref={ref}>
       <StatCard
         icon={Flame}
         label="Detections"
