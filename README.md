@@ -15,7 +15,7 @@ SkyAlert is a computer vision system for detecting wildfires and floods from sat
 
 SkyAlert has two parts that run at the same time:
 
-- **Backend** (Python, data only): `src/firms_client.py` fetches fire detections from NASA FIRMS, `src/data_cleaning.py` cleans them, `main.py` chains the two, and `src/dashboard.py` (FastAPI) serves the result as JSON on port 8000.
+- **Backend** (Python, data only): `src/firms_client.py` fetches fire detections from NASA FIRMS, `src/data_cleaning.py` cleans them, `main.py` chains the two, and `dashboard.py` (FastAPI) serves the result as JSON on port 8000.
 - **Frontend** (React, all the UI): `frontend/` draws the dashboard on port 5173: stat cards, the fire map with a popup and heatmap, and the Analytics table. It gets every piece of data from the backend through `frontend/src/lib/api.js`.
 
 ### 1. Install the tools (once per computer)
@@ -74,7 +74,7 @@ You need **two terminals**, both starting in the `skyalert` folder.
 
 ```bash
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-python -m src.dashboard
+python dashboard.py
 ```
 
 Leave it running. It's ready when it prints `Uvicorn running on http://127.0.0.1:8000`.
@@ -106,7 +106,6 @@ This fetches and cleans the fires and prints the first few rows. No server or br
 | Problem | Fix |
 |---|---|
 | `FIRMS_MAP_KEY is not set` | Do step 3: create `.env` in the `skyalert` folder with your key. |
-| `ModuleNotFoundError: No module named 'fire_context'` (or `'main'`) | Start the backend with `python -m src.dashboard` from the `skyalert` folder, not `python src/dashboard.py`. |
 | Dashboard opens but shows "Couldn't load stats" or no fire dots | The backend isn't running. Start Terminal 1 and refresh. |
 | `Address already in use` (port 8000 or 5173) | The backend or frontend is already running in another terminal. Use that one or stop it first. |
 | `npm run dev` complains about the Node version | Install Node.js 20.19+ or 22.12+. |

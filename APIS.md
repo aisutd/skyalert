@@ -18,7 +18,7 @@ Everything the project calls, and everything it exposes.
 | **Stadia Maps, Alidade Smooth Dark** `tiles.stadiamaps.com` | Dark map background | `frontend/src/components/FireMap.jsx` → `TILES` |
 | **Google Fonts** `fonts.googleapis.com` | Inter (all text) and JetBrains Mono (numbers in the popup) | `frontend/index.html` |
 
-## Our own API (FastAPI, `src/dashboard.py`, port 8000)
+## Our own API (FastAPI, `dashboard.py`, port 8000)
 
 The API is data only (JSON); all UI is in `frontend/src`. The React app reaches these through the Vite proxy (`/api` → `127.0.0.1:8000`).
 
@@ -30,7 +30,7 @@ The API is data only (JSON); all UI is in `frontend/src`. The React app reaches 
 
 ## Caching
 
-- Fire data: 10 minutes (`src/dashboard.py`).
+- Fire data: 10 minutes (`dashboard.py`).
 - Popup data (weather + place): 30 minutes, per ~1 km (`fire_context.py`).
 
 ## Credits

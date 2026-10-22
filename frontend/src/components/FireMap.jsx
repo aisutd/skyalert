@@ -23,7 +23,10 @@ const HEAT = {
   gradient: { 0.3: 'blue', 0.5: 'cyan', 0.7: 'lime', 0.85: 'yellow', 1.0: 'red' },
 }
 
-const DOT_STYLE = { color: 'red', weight: 3, fillOpacity: 0.2 }
+// The red fill is the visible dot (DOT_RADIUS). The stroke is invisible but still catches
+// clicks, so each dot's click area reaches DOT_RADIUS + weight / 2 = 9 px.
+const DOT_RADIUS = 4
+const DOT_STYLE = { color: 'transparent', weight: 10, fillColor: 'red', fillOpacity: 0.9 }
 
 // Make a dot reachable with Tab and readable by screen readers
 function labelDot(layer, fire, dotToFire) {
@@ -44,7 +47,7 @@ function FireDots({ fires, onSelect, dotToFire }) {
         <CircleMarker
           key={fire.id}
           center={[fire.latitude, fire.longitude]}
-          radius={1}
+          radius={DOT_RADIUS}
           pathOptions={DOT_STYLE}
           bubblingMouseEvents={false} // a dot click shouldn't also reach the map (which closes the popup)
           eventHandlers={{
@@ -161,7 +164,7 @@ export default function FireMap({ fires, theme, safeTop, visible, onOpenAnalysis
         {selected && (
           <CircleMarker
             center={[selected.fire.latitude, selected.fire.longitude]}
-            radius={8}
+            radius={DOT_RADIUS + 5}
             pathOptions={{ className: 'fire-ring', weight: 2, fill: false }}
             interactive={false}
           />

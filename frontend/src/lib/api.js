@@ -1,15 +1,15 @@
 // Every call from the frontend to the backend lives here.
 //
-// The backend is the FastAPI server in src/dashboard.py (run: python -m src.dashboard),
+// The backend is the FastAPI server in dashboard.py (run: python dashboard.py),
 // listening on http://127.0.0.1:8000. The frontend asks for "/api/...", and the Vite dev
 // server forwards it there (see the proxy in vite.config.js), so no port appears below.
 //
-//   frontend function    ->  FastAPI endpoint (src/dashboard.py)  ->  Python that makes the data
-//   getSummary()         ->  GET /api/summary                     ->  main.fetch_fires()
-//   getFires()           ->  GET /api/fires                       ->  main.fetch_fires()
-//                                                                     = src/firms_client.fetch_viirs()
-//                                                                       + src/data_cleaning.clean_viirs()
-//   getFireContext()     ->  GET /api/fire-context                ->  fire_context.get_fire_context()
+//   frontend function    ->  FastAPI endpoint (dashboard.py)  ->  Python that makes the data
+//   getSummary()         ->  GET /api/summary                 ->  main.fetch_fires()
+//   getFires()           ->  GET /api/fires                   ->  main.fetch_fires()
+//                                                                 = src/firms_client.fetch_viirs()
+//                                                                   + src/data_cleaning.clean_viirs()
+//   getFireContext()     ->  GET /api/fire-context            ->  fire_context.get_fire_context()
 
 const API_BASE = '/api' // forwarded to the FastAPI server by vite.config.js
 

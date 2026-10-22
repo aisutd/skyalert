@@ -82,4 +82,4 @@ def fire_context(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("src.dashboard:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("dashboard:app", host="127.0.0.1", port=8000, reload=True)

@@ -1,6 +1,6 @@
 """Real-world context for one fire location: place name, weather and fire-weather risk.
 
-Used by the map's fire information panel (src/dashboard.py -> /api/fire-context).
+Used by the map's fire information panel (dashboard.py -> /api/fire-context).
 
 Nothing here is made up. Every value comes from:
   - Open-Meteo (https://open-meteo.com): weather forecast + the past week's rain
