@@ -16,7 +16,7 @@ Everything the project calls, and everything it exposes.
 |---|---|---|
 | **Esri World Street Map** `server.arcgisonline.com` | Light map background | `frontend/src/components/FireMap.jsx` → `TILES` |
 | **Stadia Maps, Alidade Smooth Dark** `tiles.stadiamaps.com` | Dark map background | `frontend/src/components/FireMap.jsx` → `TILES` |
-| **Google Fonts** `fonts.googleapis.com` | Inter (all text) and JetBrains Mono (numbers in the popup) | `frontend/index.html` |
+| **Google Fonts** `fonts.googleapis.com` | Archivo (all text) and JetBrains Mono (numbers in the popup) | `frontend/index.html` |
 
 ## Our own API (FastAPI, `dashboard.py`, port 8000)
 

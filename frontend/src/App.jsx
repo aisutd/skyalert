@@ -83,7 +83,7 @@ export default function App() {
       {/* The map stays loaded while other pages are open (just hidden), so
           coming back to it is instant instead of rebuilding the whole map */}
       <main className="map-area" ref={mapArea} hidden={activePage !== 'map'}>
-        <FireMap fires={fires} theme={theme} safeTop={safeTop} visible={activePage === 'map'} onOpenAnalysis={openAnalysis} />
+        <FireMap fires={fires} error={firesError} theme={theme} safeTop={safeTop} visible={activePage === 'map'} onOpenAnalysis={openAnalysis} />
         <StatCards summary={summary} error={error} ref={statCards} />
       </main>
 

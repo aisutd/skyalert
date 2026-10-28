@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet'
+import { AttributionControl, CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { Minus, Plus, Volume2, VolumeX } from 'lucide-react'
 import L from '../lib/leaflet.js'
 import { densityWeights } from '../lib/heatWeights.js'
@@ -13,6 +13,12 @@ const ZOOM_START = 4
 const TILES = {
   light: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
   dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
+}
+
+// Credit line each provider's terms require, shown in the map's corner
+const TILE_ATTRIBUTION = {
+  light: 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, HERE, Garmin, USGS, NGA, EPA, USDA, NPS',
+  dark: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 }
 
 // Keep blur below the radius; a wider blur flattens every peak into pale blue
@@ -77,9 +83,19 @@ function MapClick({ onClick }) {
   return null
 }
 
-// fires: every detection from /api/fires. safeTop: px of the map covered by the stat cards.
+// Message over the map while detections load, if they fail, or if there are none.
+// Without it all three look the same as a quiet map: an empty basemap.
+function MapStatus({ fires, error }) {
+  if (error) return <div className="map-control map-status map-status-error" role="alert">Couldn't load fire detections: {error}</div>
+  if (!fires) return <div className="map-control map-status" role="status">Loading fire detections…</div>
+  if (fires.length === 0) return <div className="map-control map-status" role="status">No fire detections in this time range.</div>
+  return null
+}
+
+// fires: every detection from /api/fires. error: set if loading them failed.
+// safeTop: px of the map covered by the stat cards.
 // visible: false while another page is open (the map stays loaded, just hidden).
-export default function FireMap({ fires, theme, safeTop, visible, onOpenAnalysis }) {
+export default function FireMap({ fires, error, theme, safeTop, visible, onOpenAnalysis }) {
   const [map, setMap] = useState(null)
   const [layer, setLayer] = useState('dots') // 'dots' | 'heat'
   const [selected, setSelected] = useState(null) // { fire, trigger }
@@ -155,10 +171,11 @@ export default function FireMap({ fires, theme, safeTop, visible, onOpenAnalysis
         center={CENTER}
         zoom={ZOOM_START}
         zoomControl={false}
-        attributionControl={false}
+        attributionControl={false} // replaced by the bottom-left one below; bottom right holds our buttons
         className="fire-map-canvas"
       >
-        <TileLayer key={theme} url={TILES[theme]} />
+        <AttributionControl position="bottomleft" />
+        <TileLayer key={theme} url={TILES[theme]} attribution={TILE_ATTRIBUTION[theme]} />
         {fires && layer === 'dots' && <FireDots fires={fires} onSelect={select} dotToFire={dotToFire} />}
         {fires && layer === 'heat' && <HeatLayer fires={fires} />}
         {selected && (
@@ -171,6 +188,8 @@ export default function FireMap({ fires, theme, safeTop, visible, onOpenAnalysis
         )}
         <MapClick onClick={close} />
       </MapContainer>
+
+      <MapStatus fires={fires} error={error} />
 
       {/* Dots / heatmap switch (top right) */}
       <div className="map-control layer-toggle" role="radiogroup" aria-label="Map layer">

@@ -11,6 +11,29 @@ SkyAlert is a computer vision system for detecting wildfires and floods from sat
 - PyTorch, ResNet, U-Net, Rasterio, and scikit-learn
 - NASA FIRMS, DeepGlobe, Google Earth Engine, and Copernicus EMS
 
+## Quick start
+
+First time only: put your NASA FIRMS key in `.env` (see step 3 below).
+
+**Terminal 1, backend** (in the `skyalert` folder):
+
+```bash
+python3 -m venv .venv              # first time only
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt    # first time only
+python dashboard.py                # API on http://127.0.0.1:8000
+```
+
+**Terminal 2, frontend** (in the `skyalert` folder):
+
+```bash
+cd frontend
+npm install                        # first time only
+npm run dev                        # dashboard on http://localhost:5173
+```
+
+Open **http://localhost:5173**. Full details and troubleshooting are below.
+
 ## Running SkyAlert from scratch
 
 SkyAlert has two parts that run at the same time:
