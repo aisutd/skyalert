@@ -1,7 +1,7 @@
-from src.data_cleaning import clean_viirs
-from src.firms_client import US_BOUNDS, fetch_viirs
+from backend.data_cleaning import clean_viirs
+from backend.firms_client import US_BOUNDS, fetch_viirs
 
-# US_BOUNDS (the box we fetch) comes from src/firms_client.py
+# US_BOUNDS (the box we fetch) comes from backend/firms_client.py
 REGION_NAME = "Contiguous United States"
 FIRMS_SOURCE = "VIIRS_SNPP_NRT"
 DAY_RANGE = 2
@@ -11,10 +11,10 @@ CONFIDENCE_LABELS = {"l": "Low", "n": "Nominal", "h": "High"}
 
 
 def fetch_fires():
-    """Download the latest US fire detections and clean them, using the team's src/ files."""
-    # EXTERNAL API: NASA FIRMS, called through src/firms_client.py (needs FIRMS_MAP_KEY in .env)
+    """Download the latest US fire detections and clean them, using the team's backend/ files."""
+    # EXTERNAL API: NASA FIRMS, called through backend/firms_client.py (needs FIRMS_MAP_KEY in .env)
     raw = fetch_viirs(area=US_BOUNDS, days=DAY_RANGE, source=FIRMS_SOURCE)
-    # src/data_cleaning.py drops bad coordinates and duplicate detections
+    # backend/data_cleaning.py drops bad coordinates and duplicate detections
     return clean_viirs(raw)
 
 

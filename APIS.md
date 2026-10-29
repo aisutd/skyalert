@@ -6,7 +6,7 @@ Everything the project calls, and everything it exposes.
 
 | API | Used for | Key needed? | Limits / notes | Where in code |
 |---|---|---|---|---|
-| **NASA FIRMS** `firms.modaps.eosdis.nasa.gov/api/area/csv/` | Satellite fire detections (VIIRS_SNPP_NRT): location, brightness, FRP, confidence, date and time | Yes, `FIRMS_MAP_KEY` in `.env` | Free key. Too many requests returns plain-text errors instead of CSV | `src/firms_client.py` → `fetch_viirs()` (called by `main.py` → `fetch_fires()`) |
+| **NASA FIRMS** `firms.modaps.eosdis.nasa.gov/api/area/csv/` | Satellite fire detections (VIIRS_SNPP_NRT): location, brightness, FRP, confidence, date and time | Yes, `FIRMS_MAP_KEY` in `.env` | Free key. Too many requests returns plain-text errors instead of CSV | `backend/firms_client.py` → `fetch_viirs()` (called by `main.py` → `fetch_fires()`) |
 | **Open-Meteo** `api.open-meteo.com/v1/forecast` | Current temperature, humidity and wind; the 24 h hourly forecast; past week's rain. Feeds the popup's weather tiles and the risk level | No | Free for non-commercial use. Modeled forecast data, not a station at the fire | `fire_context.py` → `fetch_weather()` |
 | **OpenStreetMap Nominatim** `nominatim.openstreetmap.org/reverse` | Place name from a lat/lon, e.g. "Poinsett County, Arkansas" (popup title) | No | Max 1 request per second, and must send a `User-Agent`. Both are handled in `reverse_geocode()` | `fire_context.py` → `reverse_geocode()` |
 

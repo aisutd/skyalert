@@ -38,7 +38,7 @@ Open **http://localhost:5173**. Full details and troubleshooting are below.
 
 SkyAlert has two parts that run at the same time:
 
-- **Backend** (Python, data only): `src/firms_client.py` fetches fire detections from NASA FIRMS, `src/data_cleaning.py` cleans them, `main.py` chains the two, and `dashboard.py` (FastAPI) serves the result as JSON on port 8000.
+- **Backend** (Python, data only): `backend/firms_client.py` fetches fire detections from NASA FIRMS, `backend/data_cleaning.py` cleans them, `main.py` chains the two, and `dashboard.py` (FastAPI) serves the result as JSON on port 8000.
 - **Frontend** (React, all the UI): `frontend/` draws the dashboard on port 5173: stat cards, the fire map with a popup and heatmap, and the Analytics table. It gets every piece of data from the backend through `frontend/src/lib/api.js`.
 
 ### 1. Install the tools (once per computer)
