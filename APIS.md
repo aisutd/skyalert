@@ -7,8 +7,8 @@ Everything the project calls, and everything it exposes.
 | API | Used for | Key needed? | Limits / notes | Where in code |
 |---|---|---|---|---|
 | **NASA FIRMS** `firms.modaps.eosdis.nasa.gov/api/area/csv/` | Satellite fire detections (VIIRS_SNPP_NRT): location, brightness, FRP, confidence, date and time | Yes, `FIRMS_MAP_KEY` in `.env` | Free key. Too many requests returns plain-text errors instead of CSV | `backend/firms_client.py` → `fetch_viirs()` (called by `main.py` → `fetch_fires()`) |
-| **Open-Meteo** `api.open-meteo.com/v1/forecast` | Current temperature, humidity and wind; the 24 h hourly forecast; past week's rain. Feeds the popup's weather tiles and the risk level | No | Free for non-commercial use. Modeled forecast data, not a station at the fire | `fire_context.py` → `fetch_weather()` |
-| **OpenStreetMap Nominatim** `nominatim.openstreetmap.org/reverse` | Place name from a lat/lon, e.g. "Poinsett County, Arkansas" (popup title) | No | Max 1 request per second, and must send a `User-Agent`. Both are handled in `reverse_geocode()` | `fire_context.py` → `reverse_geocode()` |
+| **Open-Meteo** `api.open-meteo.com/v1/forecast` | Current temperature, humidity and wind; the 24 h hourly forecast; past week's rain. Feeds the popup's weather tiles and the risk level | No | Free for non-commercial use. Modeled forecast data, not a station at the fire | `backend/fire_context.py` → `fetch_weather()` |
+| **OpenStreetMap Nominatim** `nominatim.openstreetmap.org/reverse` | Place name from a lat/lon, e.g. "Poinsett County, Arkansas" (popup title) | No | Max 1 request per second, and must send a `User-Agent`. Both are handled in `reverse_geocode()` | `backend/fire_context.py` → `reverse_geocode()` |
 
 ## Map tiles and fonts (loaded by the browser)
 
@@ -18,7 +18,7 @@ Everything the project calls, and everything it exposes.
 | **Stadia Maps, Alidade Smooth Dark** `tiles.stadiamaps.com` | Dark map background | `frontend/src/components/FireMap.jsx` → `TILES` |
 | **Google Fonts** `fonts.googleapis.com` | Archivo (all text) and JetBrains Mono (numbers in the popup) | `frontend/index.html` |
 
-## Our own API (FastAPI, `dashboard.py`, port 8000)
+## Our own API (FastAPI, `backend/dashboard.py`, port 8000)
 
 The API is data only (JSON); all UI is in `frontend/src`. The React app reaches these through the Vite proxy (`/api` → `127.0.0.1:8000`).
 
@@ -30,8 +30,8 @@ The API is data only (JSON); all UI is in `frontend/src`. The React app reaches 
 
 ## Caching
 
-- Fire data: 10 minutes (`dashboard.py`).
-- Popup data (weather + place): 30 minutes, per ~1 km (`fire_context.py`).
+- Fire data: 10 minutes (`backend/dashboard.py`).
+- Popup data (weather + place): 30 minutes, per ~1 km (`backend/fire_context.py`).
 
 ## Credits
 

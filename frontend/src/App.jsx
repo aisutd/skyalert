@@ -32,7 +32,7 @@ export default function App() {
   const statCards = useRef(null)
 
   // Load the stats and the cleaned fire detections from the FastAPI backend once on page load
-  // (lib/api.js -> dashboard.py -> main.fetch_fires -> firms_client + data_cleaning)
+  // (lib/api.js -> backend/dashboard.py -> main.fetch_fires -> firms_client + data_cleaning)
   useEffect(() => {
     getSummary().then(setSummary).catch((err) => setError(err.message))
     getFires().then(setFires).catch((err) => setFiresError(err.message))

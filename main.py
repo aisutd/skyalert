@@ -18,7 +18,7 @@ def fetch_fires():
     return clean_viirs(raw)
 
 
-# Only runs when you do `python main.py`, not when dashboard.py imports this file
+# Only runs when you do `python main.py`, not when backend/dashboard.py imports this file
 if __name__ == "__main__":
     df = fetch_fires()
     print(f"Found {len(df)} active fires")

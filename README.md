@@ -15,13 +15,15 @@ SkyAlert is a computer vision system for detecting wildfires and floods from sat
 
 First time only: put your NASA FIRMS key in `.env` (see step 3 below).
 
+Start the backend first, then the frontend, then open the browser. Both terminals start in the `skyalert` folder, not inside `backend/` or `frontend/`.
+
 **Terminal 1, backend** (in the `skyalert` folder):
 
 ```bash
 python3 -m venv .venv              # first time only
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt    # first time only
-python dashboard.py                # API on http://127.0.0.1:8000
+python -m backend.dashboard        # API on http://127.0.0.1:8000
 ```
 
 **Terminal 2, frontend** (in the `skyalert` folder):
@@ -29,16 +31,16 @@ python dashboard.py                # API on http://127.0.0.1:8000
 ```bash
 cd frontend
 npm install                        # first time only
-npm run dev                        # dashboard on http://localhost:5173
+npm run dev                        # prints the address to open
 ```
 
-Open **http://localhost:5173**. Full details and troubleshooting are below.
+Wait for Terminal 1 to print `Uvicorn running on http://127.0.0.1:8000`, then open the address Terminal 2 printed (usually **http://localhost:5173**). Full details and troubleshooting are below.
 
 ## Running SkyAlert from scratch
 
 SkyAlert has two parts that run at the same time:
 
-- **Backend** (Python, data only): `backend/firms_client.py` fetches fire detections from NASA FIRMS, `backend/data_cleaning.py` cleans them, `main.py` chains the two, and `dashboard.py` (FastAPI) serves the result as JSON on port 8000.
+- **Backend** (Python, data only): `backend/firms_client.py` fetches fire detections from NASA FIRMS, `backend/data_cleaning.py` cleans them, `main.py` chains the two, `backend/fire_context.py` gets the weather and place name for the fire popup, and `backend/dashboard.py` (FastAPI) serves it all as JSON on port 8000.
 - **Frontend** (React, all the UI): `frontend/` draws the dashboard on port 5173: stat cards, the fire map with a popup and heatmap, and the Analytics table. It gets every piece of data from the backend through `frontend/src/lib/api.js`.
 
 ### 1. Install the tools (once per computer)
@@ -91,14 +93,20 @@ cd ..
 
 ### 6. Run it (every time)
 
-You need **two terminals**, both starting in the `skyalert` folder.
+You need **two terminals**, both starting in the `skyalert` folder. Go in this order:
+
+1. Start the backend (Terminal 1) and wait until it's ready.
+2. Start the frontend (Terminal 2).
+3. Open the dashboard in your browser.
 
 **Terminal 1, backend:**
 
 ```bash
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-python dashboard.py
+python -m backend.dashboard
 ```
+
+Run this from the `skyalert` folder: your prompt should end in `skyalert %`, not `backend %`. After activating, the prompt should start with `(.venv)`. If it shows `(base)` instead, you're on Anaconda's Python, so run `conda deactivate` and then activate again.
 
 Leave it running. It's ready when it prints `Uvicorn running on http://127.0.0.1:8000`.
 
@@ -109,7 +117,7 @@ cd frontend
 npm run dev
 ```
 
-Then open **http://localhost:5173** in your browser. The first load takes a few seconds while the backend downloads the latest fires from NASA. After that, the data is cached for 10 minutes.
+Then open the address it prints, usually **http://localhost:5173**. If another project is already using 5173, Vite picks the next free port (5174, 5175, …), so always use the one in the terminal. The first load takes a few seconds while the backend downloads the latest fires from NASA. After that, the data is cached for 10 minutes.
 
 To stop, press `Ctrl+C` in each terminal.
 
@@ -130,6 +138,9 @@ This fetches and cleans the fires and prints the first few rows. No server or br
 |---|---|
 | `FIRMS_MAP_KEY is not set` | Do step 3: create `.env` in the `skyalert` folder with your key. |
 | Dashboard opens but shows "Couldn't load stats" or no fire dots | The backend isn't running. Start Terminal 1 and refresh. |
+| `ModuleNotFoundError: No module named 'backend'` | You're inside the `backend/` folder. Run `cd ..` to get back to `skyalert`, then `python -m backend.dashboard`. |
+| `python dashboard.py` says "No such file" | The server moved to `backend/`. Use `python -m backend.dashboard` from the `skyalert` folder. |
+| Map shows a 502 error for fire detections | The frontend can't reach the backend. Start Terminal 1 (or check it didn't crash), wait for the Uvicorn line, then refresh. |
 | `Address already in use` (port 8000 or 5173) | The backend or frontend is already running in another terminal. Use that one or stop it first. |
 | `npm run dev` complains about the Node version | Install Node.js 20.19+ or 22.12+. |
 

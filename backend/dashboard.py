@@ -4,7 +4,7 @@ import time
 from fastapi import FastAPI, Query
 from fastapi.responses import Response
 
-from fire_context import get_fire_context
+from backend.fire_context import get_fire_context
 from main import CONFIDENCE_LABELS, DAY_RANGE, FIRMS_SOURCE, REGION_NAME, US_BOUNDS, fetch_fires
 
 # FIRMS only updates every few hours, so reuse the data for a while instead of
@@ -82,4 +82,4 @@ def fire_context(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("dashboard:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("backend.dashboard:app", host="127.0.0.1", port=8000, reload=True)

@@ -39,7 +39,7 @@ function computePlace(map, fire, contentHeight, safeTop) {
 }
 
 // Place name, weather and risk for the fire, from the FastAPI backend
-// (lib/api.js -> dashboard.py /api/fire-context -> fire_context.py)
+// (lib/api.js -> backend/dashboard.py /api/fire-context -> backend/fire_context.py)
 function useFireContext(fire) {
   const [state, setState] = useState({ status: 'loading', context: null })
   useEffect(() => {
