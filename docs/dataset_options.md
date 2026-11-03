@@ -120,7 +120,7 @@ The numbers above come from the papers and dataset pages. We downloaded the auth
 
 ### Other datasets considered
 
-- **Next Day Wildfire Spread** forecasts tomorrow's fire rather than detecting today's, and 10 of its 12 inputs are weather, terrain, and population layers. We inspected it in `notebooks/ndws.ipynb` before ruling it out.
+- **Next Day Wildfire Spread** forecasts tomorrow's fire rather than detecting today's, and 10 of its 12 inputs are weather, terrain, and population layers. That rules it out for detection, but it fits the second model, which predicts where a detected fire spreads the next day. `notebooks/train_spread.ipynb` trains on it.
 - **WildfireSpreadTS** has some VIIRS reflectance bands, but it also forecasts tomorrow's fire rather than detecting today's.
 - **CaBuAr** labels land that has already burned, not active fire. It may be useful for a later burned-area phase.
 
