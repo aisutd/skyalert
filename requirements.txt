@@ -1,9 +1,11 @@
 requests
 numpy
 pandas
+python-dotenv
+fastapi
+uvicorn
 folium
 matplotlib
-python-dotenv
 tifffile
 kaggle
 torch
