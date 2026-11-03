@@ -1,0 +1,15 @@
+{
+  "id": "notlokii/skyalert-fire-spread-unet",
+  "title": "SkyAlert Fire Spread UNet",
+  "code_file": "../../notebooks/train_spread.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "fantineh/next-day-wildfire-spread"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

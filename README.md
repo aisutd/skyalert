@@ -66,6 +66,33 @@ python notebooks/inspect_ndws.py
 python notebooks/inspect_landsat.py
 ```
 
+## Model Training
+
+There are two U-Net models. Each notebook prepares its data, trains U-Net Light (about 1.9 million parameters, from Pereira et al. 2021), and scores it on the test split.
+
+- `notebooks/train_unet.ipynb` detects active fire in Landsat-8 patches, from bands 7, 6, and 2. It uses the Landsat-8 Active Fire North America datasets, about 23 GB. It writes `index.csv`, the weights `detection_unet.pt`, `detection_history.csv` per epoch, and `detection_results.csv`.
+- `notebooks/train_spread.ipynb` predicts where a fire will be tomorrow from today's fire, weather, fuel, and terrain. It uses Next Day Wildfire Spread, about 4 GB. It writes `spread_index.csv`, `spread_feature_stats.csv` for input scaling, `spread_baseline.csv` (the score of predicting that tomorrow's fire is today's fire), the weights `spread_unet.pt`, `spread_history.csv`, and `spread_results.csv`.
+
+Training runs on Kaggle, where the datasets are mounted and nothing is downloaded. It trains for up to 50 epochs and stops early once val stops improving. Run locally, each notebook downloads a small part of its data into `data/` and trains for 2 epochs, only to check the code: about 100 MB for detection and about 570 MB for spread.
+
+1. Create a Kaggle API token at [kaggle.com/settings](https://www.kaggle.com/settings). Save it in `~/.kaggle/access_token`. The notebooks also read `~/.kaggle/kaggle.json`.
+2. Run a notebook locally with the `.venv` kernel to check it.
+3. Upload it to Kaggle as a private GPU notebook with its datasets attached:
+
+   ```bash
+   kaggle kernels push -p kaggle/detection
+   kaggle kernels push -p kaggle/spread
+   ```
+
+   Each `kernel-metadata.json` holds the notebook id, the GPU setting, and the dataset list. Change the id to your own Kaggle username before pushing.
+
+4. Check progress, then download the weights and scores when the status is complete:
+
+   ```bash
+   kaggle kernels status notlokii/skyalert-fire-spread-unet
+   kaggle kernels output notlokii/skyalert-fire-spread-unet -p data/training
+   ```
+
 ## Project Layout
 
 ```
@@ -75,6 +102,10 @@ notebooks/ndws.ipynb          Next Day Wildfire Spread exploration
 notebooks/inspect_ndws.py     Download and parse helper for ndws.ipynb
 notebooks/landsat.ipynb       Landsat-8 Active Fire sample
 notebooks/inspect_landsat.py  Download and parse helper for landsat.ipynb
+notebooks/train_unet.ipynb    Fire detection U-Net training
+notebooks/train_spread.ipynb  Next-day fire spread U-Net training
+kaggle/detection/             Kaggle upload settings for train_unet.ipynb
+kaggle/spread/                Kaggle upload settings for train_spread.ipynb
 docs/dataset_options.md       Training dataset comparison
 data/                         Downloaded datasets, not committed
 ```
