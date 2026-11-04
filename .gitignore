@@ -4,6 +4,7 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 fires.html
+data/
 
 # React frontend
 node_modules/

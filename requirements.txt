@@ -4,3 +4,8 @@ pandas
 python-dotenv
 fastapi
 uvicorn
+folium
+matplotlib
+tifffile
+kaggle
+torch

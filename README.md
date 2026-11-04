@@ -130,7 +130,7 @@ python main.py
 
 This fetches and cleans the fires and prints the first few rows. No server or browser is needed.
 
-`fires.ipynb` loads the same data into a pandas dataframe for exploring the columns. To run it in Cursor or VS Code, select the `.venv` Python kernel.
+`notebooks/fires.ipynb` loads the same data into a pandas dataframe for exploring the columns. To run it in Cursor or VS Code, select the `.venv` Python kernel.
 
 ### Troubleshooting
 
@@ -145,6 +145,95 @@ This fetches and cleans the fires and prints the first few rows. No server or br
 | `npm run dev` complains about the Node version | Install Node.js 20.19+ or 22.12+. |
 
 See `APIS.md` for every API the project calls and exposes.
+
+## Training Data
+
+`docs/dataset_options.md` compares candidate training datasets. Landsat-8 Active Fire trains the fire detector, and Next Day Wildfire Spread trains the next-day spread model.
+
+`notebooks/ndws.ipynb` loads a sample of Next Day Wildfire Spread and shows its inputs, labels, and fire masks. On first run it downloads one 120 MB file into `data/ndws/`, which is not committed. Select the `.venv` kernel and run all cells. To print the same tables in the terminal instead:
+
+```bash
+python notebooks/inspect_ndws.py
+```
+
+`notebooks/landsat.ipynb` loads the Landsat-8 Active Fire sample, not a continent archive. On first run it downloads a 231 MB zip into `data/landsat8/`, which is not committed, and shows five image-and-mask pairs with their dimensions and band names. Select the `.venv` kernel and run all cells. To print the same tables in the terminal instead:
+
+```bash
+python notebooks/inspect_landsat.py
+```
+
+## Model Training
+
+There are two U-Net models. Each notebook prepares its data, trains U-Net Light (about 1.9 million parameters, from Pereira et al. 2021), and scores it on the test split.
+
+- `notebooks/train_unet.ipynb` detects active fire in Landsat-8 patches, from bands 7, 6, and 2. It uses the Landsat-8 Active Fire North America datasets, about 23 GB. It writes `index.csv`, the weights `detection_unet.pt`, `detection_history.csv` per epoch, and `detection_results.csv`.
+- `notebooks/train_spread.ipynb` predicts where a fire will be tomorrow from today's fire, weather, fuel, and terrain. It uses Next Day Wildfire Spread, about 4 GB. It writes `spread_index.csv`, `spread_feature_stats.csv` for input scaling, `spread_baseline.csv` (the score of predicting that tomorrow's fire is today's fire), the weights `spread_unet.pt`, `spread_history.csv`, and `spread_results.csv`.
+
+Training runs on Kaggle, where the datasets are mounted and nothing is downloaded. It trains for up to 50 epochs and stops early once val stops improving. Run locally, each notebook downloads a small part of its data into `data/` and trains for 2 epochs, only to check the code: about 100 MB for detection and about 570 MB for spread. Local outputs go to `data/training/local/`, so they never overwrite results downloaded from Kaggle.
+
+1. Create a Kaggle API token at [kaggle.com/settings](https://www.kaggle.com/settings). Save it in `~/.kaggle/access_token`. The notebooks also read `~/.kaggle/kaggle.json`.
+2. Run a notebook locally with the `.venv` kernel to check it.
+3. Upload it to Kaggle as a private GPU notebook with its datasets attached:
+
+   ```bash
+   kaggle kernels push -p kaggle/detection
+   kaggle kernels push -p kaggle/spread
+   ```
+
+   Each `kernel-metadata.json` holds the notebook id, the GPU setting, and the dataset list. Change the id to your own Kaggle username before pushing.
+
+4. Check progress, then download the weights and scores when the status is complete:
+
+   ```bash
+   kaggle kernels status notlokii/skyalert-fire-spread-unet
+   kaggle kernels output notlokii/skyalert-fire-spread-unet -p data/training
+   ```
+
+### Results
+
+Scores on the test split, which the models never trained on.
+
+| Model | Precision | Recall | IoU | Compared with |
+|---|---|---|---|---|
+| Fire detection | 82.4% | 93.3% | 0.778 | Pereira et al. U-Net Light on the voting mask: 90.2%, 96.5%, 0.873, with a random patch split rather than our split by location |
+| Next-day spread | 24.5% | 52.5% | 0.200 | Copying today's fire: 35.7%, 27.3%, 0.183 |
+
+Detection precision and recall count fire pixels against the voting mask. Spread scores count 1 km pixels that burn the next day, leaving out uncertain pixels.
+
+## Demos
+
+The demo scripts run the trained models on test data and save figures for presentations to `docs/figures/`. They need the weights and stats downloaded from Kaggle into `data/training/`.
+
+```bash
+python demos/detector_california.py
+python demos/spread_examples.py
+```
+
+- `detector_california.py` runs the detector on two California fires from August 2020 that it never trained on, in the southern Sierra Nevada and the Trinity Alps. It downloads the 38 patches it needs, about 50 MB, and writes `docs/figures/detector_042035.png` and `detector_045032.png`, plus a map and per-patch tables in `data/demos/california/`. Each row of a figure is one 7.7 km patch: the satellite image, the model's fire in red, and the label in yellow, all from the same moment.
+- `spread_examples.py` shows the spread model on test fires and writes `docs/figures/spread_examples.png`. Each row is one 64 km area: today's fire, the model's forecast for tomorrow, and what burned the next day. The first three rows are the best forecasts among test fires with at least 30 km² burning the next day, and the last row is the median one.
+
+## Project Layout
+
+```
+main.py                       Fetch and clean FIRMS fires without the dashboard
+backend/                      FIRMS client, cleaning, fire context, FastAPI dashboard API
+frontend/                     React dashboard
+APIS.md                       Every API the project calls and exposes
+docs/integration.md           How fetch, cleaning, map, and dashboard fit together
+notebooks/fires.ipynb         FIRMS data exploration
+notebooks/ndws.ipynb          Next Day Wildfire Spread exploration
+notebooks/inspect_ndws.py     Download and parse helper for ndws.ipynb
+notebooks/landsat.ipynb       Landsat-8 Active Fire sample
+notebooks/inspect_landsat.py  Download and parse helper for landsat.ipynb
+notebooks/train_unet.ipynb    Fire detection U-Net training
+notebooks/train_spread.ipynb  Next-day fire spread U-Net training
+kaggle/detection/             Kaggle upload settings for train_unet.ipynb
+kaggle/spread/                Kaggle upload settings for train_spread.ipynb
+demos/                        Run the trained models and save figures
+docs/dataset_options.md       Training dataset comparison
+docs/figures/                 Demo figures for presentations
+data/                         Downloaded datasets and trained weights, not committed
+```
 
 ## Docker Setup
 

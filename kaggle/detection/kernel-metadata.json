@@ -1,0 +1,16 @@
+{
+  "id": "notlokii/skyalert-fire-unet",
+  "title": "SkyAlert Fire UNet",
+  "code_file": "../../notebooks/train_unet.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "pe4eniks/fire-segmentation-north-america-1",
+    "pe4eniks/fire-segmentation-north-america-2"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
