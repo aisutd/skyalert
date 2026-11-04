@@ -5,3 +5,5 @@ folium
 matplotlib
 python-dotenv
 tifffile
+fastapi
+uvicorn
