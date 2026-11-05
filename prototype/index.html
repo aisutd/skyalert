@@ -8,7 +8,7 @@
 <!-- Fonts are optional; the stack falls back to system fonts offline -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..900&family=Space+Grotesk:wght@500..700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 /* =====================================================================
@@ -16,6 +16,7 @@
    ===================================================================== */
 :root {
   --f: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-brand: 'Space Grotesk', var(--f);   /* only the SkyAlert wordmark */
   --f-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --ease: cubic-bezier(.65, 0, .35, 1);
   --fire: #F5823A; --fire-deep: #D96527; --amber: #F2C14E;
@@ -78,7 +79,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
 .flyer[hidden] { display: none; }
 
 /* ---------- shared components ---------- */
-.br { display: inline-flex; align-items: center; gap: 9px; font-weight: 750; font-size: 16px; white-space: nowrap; }
+.br { display: inline-flex; align-items: center; gap: 9px; font-family: var(--f-brand); font-weight: 700; font-size: 16px; white-space: nowrap; }
 .br-m { width: 20px; height: 28px; flex: none; }   /* SkyAlert logo: flame (fire) + wave (flood) */
 .lg-flame { fill: var(--fire); } .lg-wave { fill: var(--flood-mid); }
 .smp { display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--muted); border: 1px dashed var(--line-2); padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
@@ -221,12 +222,12 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
 .cta.back:hover { background: var(--surface-2); opacity: 1; }
 .fp1 h2 { font-size: 20px; font-weight: 700; line-height: 1.3; letter-spacing: -.01em; }
 .fp1-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.fp1-row .rk { flex-direction: column; align-items: center; gap: 6px; font-size: 17px; }   /* bars on top, risk word below; smaller so the row has room */
+.fp1-row .rk { flex-direction: column; align-items: center; gap: 6px; font-size: 17px; font-weight: 600; }   /* bars on top, risk word below; smaller so the row has room */
 .fp1-row .tk i.on, .ov-row .tk i.on, .fp2 .tk i.on { background: var(--rcd); }   /* darker risk colours everywhere bars appear: overview, map summary, fire details + list */
 .fp1-row .cf-l { white-space: nowrap; }   /* "fire detections" on one line */
 .pr { display: flex; flex-direction: column; gap: 3px; }
-.mv-num { font-size: 30px; font-weight: 800; letter-spacing: -.01em; }
-.mv-num .pct { font-size: .6em; font-weight: 700; letter-spacing: 0; color: var(--muted); margin-left: 2px; }   /* smaller, quieter "/100" so the score stands out */
+.mv-num { font-size: 30px; font-weight: 600; letter-spacing: -.02em; }
+.mv-num .pct { font-size: .6em; font-weight: 400; letter-spacing: 0; color: var(--muted); margin-left: 2px; }   /* smaller, quieter "/100" so the score stands out */
 .pr-l, .cf span { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
 .cf { display: flex; align-items: center; gap: 8px; }
 .fp1-row .cf { flex-direction: column; align-items: flex-start; gap: 3px; }   /* count on its own line, label below, like the index */
@@ -456,7 +457,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
    ===================================================================== */
 .smp.live { color: var(--ink-2); border-style: solid; border-color: var(--hz-line); gap: 6px; }
 .smp.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--hz-deep); }
-.cf .cf-n { font-size: 30px; color: var(--ink); font-weight: 800; letter-spacing: -.01em; line-height: 1; font-variant-numeric: tabular-nums; }
+.cf .cf-n { font-size: 30px; color: var(--ink); font-weight: 600; letter-spacing: -.02em; line-height: 1; font-variant-numeric: tabular-nums; }
 .rs { display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
 .rs li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 6px; line-height: 1.35; }
 .rs li::before { content: "▲"; font-size: 9px; line-height: 18px; color: var(--hz-deep); }
@@ -467,7 +468,17 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
 .loader { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: var(--bg); color: var(--ink-2); font-size: 15px; }
 .loader[hidden] { display: none; }
 .loader div { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 16px; }
-.loader i { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--line-2); border-top-color: var(--fire-deep); animation: spin .8s linear infinite; }
+.loader { transition: opacity .35s ease; }
+.loader.out { opacity: 0; pointer-events: none; }   /* fades away once the fires arrive */
+.loader > div { gap: 18px; }
+.ld-svg { width: 54px; height: 74px; animation: ld-form 1.3s cubic-bezier(.65, 0, .35, 1) both; }   /* logo is revealed from its bottom-left corner across to the flame tip */
+.ld-msg { margin: 0; animation: ld-in .5s ease .9s both; }
+.ld-dots i { display: inline-block; width: 4px; height: 4px; margin-left: 3px; border-radius: 50%; background: currentColor; vertical-align: baseline; animation: ld-dot 1.2s ease-in-out infinite; }
+.ld-dots i:nth-child(2) { animation-delay: .15s; }
+.ld-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes ld-form { from { clip-path: circle(0% at 0% 100%); } to { clip-path: circle(150% at 0% 100%); } }
+@keyframes ld-in { from { opacity: 0; transform: translateY(4px); } }
+@keyframes ld-dot { 0%, 70%, 100% { opacity: .25; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-3px); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 .banner { position: fixed; z-index: 15; left: 50%; top: 12px; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 8px 14px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 13px; box-shadow: var(--soft-shadow); }
 .banner[hidden] { display: none; }
@@ -490,7 +501,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
 </div>
 <dialog class="ds" id="ds" aria-labelledby="ds-title"></dialog>
 <div class="tip" id="tip" role="tooltip" hidden></div>
-<div class="loader" id="loader" role="status"><div><i aria-hidden="true"></i><span>Loading today's fires from NASA FIRMS…</span></div></div>
+<div class="loader" id="loader" role="status"><div><span class="ld-logo" aria-hidden="true"></span><p class="ld-msg">Loading today's fires from NASA FIRMS<span class="ld-dots" aria-hidden="true"><i></i><i></i><i></i></span></p></div></div>
 <div class="banner" id="banner" role="status" hidden></div>
 <div class="busy-dot" id="busyDot" role="status" hidden>Updating fires in view…</div>
 
@@ -621,6 +632,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
     + ['fire', 'flood'].map((k) => `<button type="button" role="radio" data-set-hz="${k}" aria-checked="${k === shown}" tabindex="${k === shown ? 0 : -1}">${ICON[k]()}<span>${k === 'fire' ? 'Fire' : 'Flood'}</span></button>`).join('') + '</div>';
   const thb = () => { const to = S.theme === 'dark' ? 'light' : 'dark'; return `<button type="button" class="thb" data-act="theme" aria-label="Switch to ${to} theme" title="Switch to ${to} theme">${S.theme === 'dark' ? sun : moon}</button>`; };
   const brand = `<span class="br">${LOGO}SkyAlert</span>`;
+  document.querySelector('#loader .ld-logo').innerHTML = `<svg class="ld-svg" viewBox="0 0 378 519"><path class="lg-flame" fill-rule="evenodd" d="${LG.flame}"/><path class="lg-wave" fill-rule="evenodd" d="${LG.wave}"/></svg>`;   // loading screen: the logo draws itself
   const smp = () => (S.hz === 'fire' && S.mode === 'model' ? '<span class="smp">Past fire, 2020</span>' : DATA[S.hz].live ? '<span class="smp live">Live data</span>' : '<span class="smp">Sample data</span>');
   const ticks = (l) => `<span class="tk" aria-hidden="true">${[1, 2, 3, 4].map((i) => `<i${i <= l ? ' class="on"' : ''}></i>`).join('')}</span>`;
   const risk = (l, cls = '') => `<span class="rk ${cls}" data-l="${l}">${ticks(l)}<span${cls === 'bare' ? ' class="sr-only"' : ''}>${RISK[l]}</span></span>`;   // 'bare': bars only, word kept for screen readers
@@ -1566,7 +1578,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
   // =====================================================================
   document.documentElement.dataset.theme = S.theme;
   startLive().then(() => {
-    LOADER.hidden = true;
+    LOADER.classList.add('out');
+    setTimeout(() => { LOADER.hidden = true; }, 400);
     render();
     MV.inert = true;
     initMap();
