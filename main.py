@@ -3,7 +3,7 @@ from backend.firms_client import US_BOUNDS, fetch_viirs
 
 # US_BOUNDS (the box we fetch) comes from backend/firms_client.py
 REGION_NAME = "Contiguous United States"
-FIRMS_SOURCE = "VIIRS_SNPP_NRT"
+FIRMS_SOURCE = "VIIRS_NOAA20_NRT"  # SNPP stopped sending data after 2026-11-02; NOAA-20 has the same columns
 DAY_RANGE = 2
 
 # VIIRS gives confidence as one letter; these are the words shown to people

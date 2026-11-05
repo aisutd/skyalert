@@ -9,3 +9,5 @@ matplotlib
 tifffile
 kaggle
 torch
+netCDF4
+nbformat

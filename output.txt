@@ -1,0 +1,27 @@
+Using existing /Users/snehalal/Projects/SkyAlert_AIM/skyalert/data/landsat8/samples.zip
+
+Read 5 image-and-mask pairs
+Image shape (256, 256, 10) uint16
+Mask shape (256, 256) uint8
+Band names are not stored in the TIFF. They follow the paper's channel order.
+
+Bands
+ channel  landsat_band                 name   shape  dtype   min   max    mean
+       0             1      Coastal aerosol 256x256 uint16  9045 23070 10387.6
+       1             2                 Blue 256x256 uint16  8192 23316  9552.4
+       2             3                Green 256x256 uint16  7217 23123  8647.9
+       3             4                  Red 256x256 uint16  6259 24575  8073.4
+       4             5        Near-infrared 256x256 uint16  5376 28056 12272.1
+       5             6 Shortwave infrared 1 256x256 uint16  5114 65535 10797.5
+       6             7 Shortwave infrared 2 256x256 uint16  5143 65535  8397.9
+       7             9               Cirrus 256x256 uint16  4969  6410  5054.5
+       8            10   Thermal infrared 1 256x256 uint16 18344 61111 27938.6
+       9            11   Thermal infrared 2 256x256 uint16 16961 45506 25430.7
+
+Pairs with the most Schroeder fire pixels
+                                          patch image_shape image_dtype mask_shape mask_dtype  schroeder_fire_pixels  murphy_fire_pixels  kumar_roy_fire_pixels
+LC08_L1TP_001067_20200812_20200812_01_RT_p00441  256x256x10      uint16    256x256      uint8                    118                 142                    137
+LC08_L1TP_124017_20200826_20200826_01_RT_p00686  256x256x10      uint16    256x256      uint8                    115                 157                    156
+LC08_L1TP_173068_20200817_20200817_01_RT_p00672  256x256x10      uint16    256x256      uint8                     41                  52                     53
+LC08_L1TP_103068_20200823_20200823_01_RT_p00610  256x256x10      uint16    256x256      uint8                     37                  52                     55
+LC08_L1TP_170069_20200812_20200812_01_RT_p00330  256x256x10      uint16    256x256      uint8                     34                  44                     47

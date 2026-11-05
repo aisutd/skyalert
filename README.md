@@ -4,12 +4,13 @@
 
 SkyAlert is a computer vision system for detecting wildfires and floods from satellite imagery. It uses a classifier to flag affected regions, a segmentation model to map damage at pixel level, and engineered satellite features to provide actionable information through an interactive dashboard.
 
-## Planned Technologies
+## Technologies
 
-- Python and JavaScript
-- Streamlit or Gradio with Folium
-- PyTorch, ResNet, U-Net, Rasterio, and scikit-learn
-- NASA FIRMS, DeepGlobe, Google Earth Engine, and Copernicus EMS
+- **Backend:** Python, FastAPI, pandas
+- **Frontend:** the live HTML prototype (plain JavaScript + Leaflet) and the React + React Leaflet dashboard
+- **Models:** PyTorch U-Nets, trained on Kaggle GPUs
+- **Live data:** NASA FIRMS (VIIRS NOAA-20), Open-Meteo, GRIDMET, OpenStreetMap Nominatim, Esri map tiles
+- **Training data:** Landsat-8 Active Fire and Next Day Wildfire Spread (flood: Sen1Floods11 planned)
 
 ## Quick start
 
@@ -36,11 +37,32 @@ npm run dev                        # prints the address to open
 
 Wait for Terminal 1 to print `Uvicorn running on http://127.0.0.1:8000`, then open the address Terminal 2 printed (usually **http://localhost:5173**). Full details and troubleshooting are below.
 
+## Live prototype (single page, no npm)
+
+`prototype/index.html` is the design prototype (overview that opens into the map) running on live data. The backend serves it, so only one terminal is needed:
+
+```bash
+source .venv/bin/activate
+python -m backend.dashboard
+```
+
+Then open **http://127.0.0.1:8000/prototype/**. Open it through this address, not by double-clicking the file: the page gets its data from `/api` on the same server, so from `file://` it falls back to sample data and shows a banner saying so.
+
+The first load can take several seconds while the backend downloads the fires from NASA and the weather for each one. After that the fires are cached for 10 minutes.
+
+The page has two views. The **overview** shows the riskiest fire in California as one big number, with the map in a box on the right. **Focus on the map** opens the map full screen, with three floating panels: the summary (top left), the selected fire and the list of fires (right) and the weather (bottom). **Overview**, or `Esc`, goes back.
+
+- **Fire** is live: today's NASA FIRMS detections across the US (red dots) and the 8 strongest fires in California, numbered on the map. Each one gets its place name, weather and the Fosberg fire-weather index from `/api/fire-context`, and the list is sorted by that index. Detections within 15 km of each other count as one fire. Click a fire dot or any other spot on the map to add it to the list and see its weather.
+- **Flood** is still sample data.
+- **Model on a past fire** (button on the overview, or the switch in the map view) draws the fire detector's output on the map at its real location: 4 Landsat-8 tiles in Sequoia National Forest, Aug 27, 2020, placed by matching them against Landsat scene 042/035 from that day. The spread predictor's examples are shown in the bottom panel, not on the map, because their test data has no locations.
+- **Model results** (chart button) has the same results as a popup, plus the training-data stats. Images are in `prototype/model_results/`.
+- **Spread model on today's data:** put `spread_unet.pt` and `spread_feature_stats.csv` from Kaggle in `data/training/` and restart the backend. The page then shows the model's chance of fire tomorrow for each fire (big number, list and a heat-map layer) instead of the fire-weather index. `backend/spread_forecast.py` builds the model's 12 inputs from FIRMS, GRIDMET and elevation tiles, and loads the model code from `notebooks/train_spread.ipynb`, like `demos/spread_examples.py`. NDVI and population aren't filled yet (they need a NASA Earthdata login), so they get the training average, as the training code does for missing pixels. Without the files, the page says it's waiting for the weights.
+
 ## Running SkyAlert from scratch
 
 SkyAlert has two parts that run at the same time:
 
-- **Backend** (Python, data only): `backend/firms_client.py` fetches fire detections from NASA FIRMS, `backend/data_cleaning.py` cleans them, `main.py` chains the two, `backend/fire_context.py` gets the weather and place name for the fire popup, and `backend/dashboard.py` (FastAPI) serves it all as JSON on port 8000.
+- **Backend** (Python, data only): `backend/firms_client.py` fetches fire detections from NASA FIRMS, `backend/data_cleaning.py` cleans them, `main.py` chains the two, `backend/fire_context.py` gets the weather and place name for the fire popup, `backend/spread_forecast.py` runs the spread model on live inputs, and `backend/dashboard.py` (FastAPI) serves it all as JSON on port 8000. It also serves the live prototype at `/prototype/`.
 - **Frontend** (React, all the UI): `frontend/` draws the dashboard on port 5173: stat cards, the fire map with a popup and heatmap, and the Analytics table. It gets every piece of data from the backend through `frontend/src/lib/api.js`.
 
 ### 1. Install the tools (once per computer)
@@ -143,6 +165,10 @@ This fetches and cleans the fires and prints the first few rows. No server or br
 | Map shows a 502 error for fire detections | The frontend can't reach the backend. Start Terminal 1 (or check it didn't crash), wait for the Uvicorn line, then refresh. |
 | `Address already in use` (port 8000 or 5173) | The backend or frontend is already running in another terminal. Use that one or stop it first. |
 | `npm run dev` complains about the Node version | Install Node.js 20.19+ or 22.12+. |
+| Prototype shows "Live data isn't available… sample data" | The backend isn't running, or the page was opened as a file. Start the backend and open http://127.0.0.1:8000/prototype/. |
+| Prototype says "Waiting for weights" | Expected until `spread_unet.pt` and `spread_feature_stats.csv` are in `data/training/`. Everything else works without them. |
+| Prototype says "Inputs unavailable" | The weights are there, but GRIDMET didn't answer. Try again later; the fire-weather index is still shown. |
+| 0 fires, or far fewer than usual | Check `FIRMS_SOURCE` in `main.py`. A satellite can stop sending data (SNPP did after 2026-11-02); switch to another VIIRS source such as `VIIRS_NOAA20_NRT` or `VIIRS_NOAA21_NRT`. |
 
 See `APIS.md` for every API the project calls and exposes.
 
@@ -216,7 +242,9 @@ python demos/spread_examples.py
 
 ```
 main.py                       Fetch and clean FIRMS fires without the dashboard
-backend/                      FIRMS client, cleaning, fire context, FastAPI dashboard API
+backend/                      FIRMS client, cleaning, fire context, spread forecast, FastAPI dashboard API
+prototype/index.html          Live single-page prototype, served at /prototype/
+prototype/model_results/      Detector and spread-model images used by the prototype
 frontend/                     React dashboard
 APIS.md                       Every API the project calls and exposes
 docs/integration.md           How fetch, cleaning, map, and dashboard fit together
@@ -235,14 +263,8 @@ docs/figures/                 Demo figures for presentations
 data/                         Downloaded datasets and trained weights, not committed
 ```
 
-## Docker Setup
+## Docker (not needed yet)
 
-Make sure Docker Desktop is installed and running.
+You do not need Docker to run anything in this repo. Use the Quick start steps above instead.
 
-```bash
-docker compose up -d
-docker compose down
-docker compose ps
-```
-
-This is a generic starter configuration. The team can add project-specific dependencies and startup commands later.
+`docker-compose.yml` is an empty placeholder. It starts a bare Linux container with no Python and no project code running, so it cannot run the backend, the frontend, or the notebooks. It is kept so the team can turn it into a real setup later.

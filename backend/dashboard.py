@@ -1,10 +1,13 @@
 import threading
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, Query
 from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 
 from backend.fire_context import get_fire_context
+from backend.spread_forecast import forecast, model_status
 from main import CONFIDENCE_LABELS, DAY_RANGE, FIRMS_SOURCE, REGION_NAME, US_BOUNDS, fetch_fires
 
 # FIRMS only updates every few hours, so reuse the data for a while instead of
@@ -77,6 +80,25 @@ def fires():
 def fire_context(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, le=180)):
     """Place name, weather and fire-weather risk for one spot, for the map's popup."""
     return get_fire_context(lat, lon)
+
+
+# OUR API: /api/model-status. Whether the trained spread model can run (its weights come from Kaggle)
+@app.get("/api/model-status")
+def spread_model_status():
+    return model_status()
+
+
+# OUR API: /api/spread-forecast?lat=&lon=. The spread model's chance of fire tomorrow, per 1 km square, for 64 x 64 km around a spot
+@app.get("/api/spread-forecast")
+def spread_forecast(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, le=180)):
+    return forecast(lat, lon, get_data()["df"])
+
+
+# The standalone HTML prototype (prototype/index.html). Served from here so the page
+# can call /api on the same address: no CORS, and the FIRMS key stays on the server
+PROTOTYPE_DIR = Path(__file__).resolve().parent.parent / "prototype"
+if PROTOTYPE_DIR.is_dir():
+    app.mount("/prototype", StaticFiles(directory=PROTOTYPE_DIR, html=True), name="prototype")
 
 
 if __name__ == "__main__":

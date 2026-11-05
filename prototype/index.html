@@ -1,0 +1,1575 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SkyAlert Live</title>
+<link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+<!-- Fonts are optional; the stack falls back to system fonts offline -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+/* =====================================================================
+   TOKENS — same neutral palette as ui-playground.html
+   ===================================================================== */
+:root {
+  --f: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --ease: cubic-bezier(.65, 0, .35, 1);
+  --fire: #F5823A; --fire-deep: #D96527; --amber: #F2C14E;
+  --flood: #65BCE8; --flood-mid: #3597CB; --cyan: #A7DDF3;
+}
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --bg: #FAF8F4; --surface: #FFFFFF; --surface-2: #F0EFEB; --surface-3: #E5E6E8;
+  --ink: #25272C; --ink-2: #44474E; --muted: #666A72; --faint: #858890;
+  --line: #E2E1DD; --line-2: #CACBCF;
+  --soft-shadow: 0 1px 2px rgba(37, 39, 44, .06), 0 8px 24px rgba(37, 39, 44, .08);
+  --map-land: #F3F1EC;
+  --fire-pale: #FFF0E5; --fire-soft: rgba(245, 130, 58, .32); --fire-band: rgba(245, 130, 58, .16); --fire-text: #B14F17; --fire-line: #D96527;
+  --flood-pale: #E7F5FC; --flood-soft: rgba(101, 188, 232, .42); --flood-band: rgba(101, 188, 232, .24); --flood-text: #1D5F85; --flood-line: #216B94;
+  --fr1: #F7DFA6; --fr2: #F2C14E; --fr3: #F5823A; --fr4: #D95757;
+  --frd1: #D9A21B; --frd2: #E08A0B; --frd3: #D9622B; --frd4: #BF3B3B;   /* darker bars for the fire list on white */
+  --wr1: #A7DDF3; --wr2: #65BCE8; --wr3: #3597CB; --wr4: #216B94;
+  --wrd1: #4FA9D6; --wrd2: #2F8CC2; --wrd3: #1F6FA3; --wrd4: #164E73;   /* darker bars for the flood list on white */
+  --cell-op: .5;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #2A2C31; --surface: #32353B; --surface-2: #383B42; --surface-3: #42454D;
+  --ink: #EEECE7; --ink-2: #D2D0CA; --muted: #A6A8AE; --faint: #8A8D94;
+  --line: #43464E; --line-2: #575A62;
+  --soft-shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 10px 28px rgba(0, 0, 0, .28);
+  --map-land: #2F3237;
+  --fire-pale: rgba(245, 130, 58, .14); --fire-soft: rgba(245, 130, 58, .38); --fire-band: rgba(245, 130, 58, .18); --fire-text: #F9A56E; --fire-line: #F5823A;
+  --flood-pale: rgba(101, 188, 232, .14); --flood-soft: rgba(101, 188, 232, .40); --flood-band: rgba(101, 188, 232, .2); --flood-text: #93D2F1; --flood-line: #A7DDF3;
+  --fr1: #E9D39A; --fr2: #F2C14E; --fr3: #F5823A; --fr4: #E06A6A;
+  --frd1: #D9A21B; --frd2: #E08A0B; --frd3: #E0703A; --frd4: #D94A4A;   /* same risk-bar colours as light mode; red and orange nudged up a touch so they read on charcoal */
+  --wrd1: var(--wr1); --wrd2: var(--wr2); --wrd3: var(--wr3); --wrd4: var(--wr4);
+  --wr1: #2E5F7A; --wr2: #3597CB; --wr3: #65BCE8; --wr4: #A7DDF3;   /* lighter = more severe on charcoal */
+  --cell-op: .62;
+}
+[data-hz="fire"] { --hz: var(--fire); --hz-deep: var(--fire-deep); --hz-pale: var(--fire-pale); --hz-soft: var(--fire-soft); --hz-band: var(--fire-band); --hz-text: var(--fire-text); --hz-line: var(--fire-line); --r1: var(--fr1); --r2: var(--fr2); --r3: var(--fr3); --r4: var(--fr4); --rd1: var(--frd1); --rd2: var(--frd2); --rd3: var(--frd3); --rd4: var(--frd4); }
+[data-hz="flood"] { --hz: var(--flood); --hz-deep: var(--flood-mid); --hz-pale: var(--flood-pale); --hz-soft: var(--flood-soft); --hz-band: var(--flood-band); --hz-text: var(--flood-text); --hz-line: var(--flood-line); --r1: var(--wr1); --r2: var(--wr2); --r3: var(--wr3); --r4: var(--wr4); --rd1: var(--wrd1); --rd2: var(--wrd2); --rd3: var(--wrd3); --rd4: var(--wrd4); }
+[data-l="1"] { --rc: var(--r1); --rcd: var(--rd1); } [data-l="2"] { --rc: var(--r2); --rcd: var(--rd2); } [data-l="3"] { --rc: var(--r3); --rcd: var(--rd3); } [data-l="4"] { --rc: var(--r4); --rcd: var(--rd4); }
+
+/* =====================================================================
+   BASE
+   ===================================================================== */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f); font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; overflow: hidden; }
+button, input { font: inherit; color: inherit; }
+h1, h2, h3, h4, p, dl, dd, ul, ol { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.sr-only { position: absolute !important; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; padding: 0; }
+.sp { flex: 1; }
+
+/* the app fills the window; the map sits underneath both layouts */
+.app { position: relative; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; background: var(--bg); transition: background-color .35s; }
+.layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.layer[hidden] { display: none; }
+[data-k], .pc { transform-origin: 0 0; }                     /* pieces scale from their top-left corner while they move */
+.flyer { position: absolute; left: 0; top: 0; z-index: 5; display: flex; align-items: baseline; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none; will-change: transform; }
+.flyer[hidden] { display: none; }
+
+/* ---------- shared components ---------- */
+.br { display: inline-flex; align-items: center; gap: 9px; font-weight: 750; font-size: 16px; white-space: nowrap; }
+.br-m { width: 20px; height: 28px; flex: none; }   /* SkyAlert logo: flame (fire) + wave (flood) */
+.lg-flame { fill: var(--fire); } .lg-wave { fill: var(--flood-mid); }
+.smp { display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--muted); border: 1px dashed var(--line-2); padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.thb { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); cursor: pointer; }
+.thb:hover { background: var(--surface-2); }
+.thb svg { width: 16px; height: 16px; }
+.rk { display: inline-flex; align-items: center; gap: 8px; font-weight: 650; white-space: nowrap; }
+.tk { display: inline-flex; gap: 2px; align-items: flex-end; }
+.tk i { width: 5px; height: 12px; border-radius: 1px; background: var(--line-2); }
+.tk i:nth-child(1) { height: 6px; } .tk i:nth-child(2) { height: 8px; } .tk i:nth-child(3) { height: 10px; }
+.tk i.on { background: var(--rc); }
+.rk.lg { font-size: 20px; gap: 10px; } .rk.lg .tk i { width: 7px; height: 20px; } .rk.lg .tk i:nth-child(1) { height: 9px; } .rk.lg .tk i:nth-child(2) { height: 13px; } .rk.lg .tk i:nth-child(3) { height: 17px; }
+.rk.xl { font-size: 34px; font-weight: 500; gap: 12px; } .rk.xl .tk i { width: 9px; height: 30px; } .rk.xl .tk i:nth-child(1) { height: 12px; } .rk.xl .tk i:nth-child(2) { height: 18px; } .rk.xl .tk i:nth-child(3) { height: 24px; }
+.kd { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.kd i { width: 9px; height: 9px; border-radius: 50%; border: 1.6px dashed var(--hz-text); }
+.lgd { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.lgd span { display: inline-flex; align-items: center; gap: 6px; }
+.lgd i { width: 18px; height: 0; border-top: 2.4px solid var(--hz-line); }
+.lgd .lg-p i { border-top-style: dashed; border-top-color: var(--hz); }
+.cfr { display: block; flex: none; }
+.cfr-bg { fill: none; stroke: var(--surface-3); }
+.cfr-fg { fill: none; stroke: var(--hz-deep); stroke-linecap: round; }
+.cfr text { font-weight: 700; fill: var(--ink); font-family: var(--f); }
+.lys { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.ly { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; white-space: nowrap; color: var(--ink-2); }
+.ly input { width: 16px; height: 16px; margin: 0; accent-color: var(--ink); cursor: pointer; flex: none; }
+.ly-g { width: 14px; height: 14px; flex: none; }
+.ly-observed { border-radius: 50%; background: var(--ink-2); transform: scale(.65); }
+.ly-predicted { border: 1.5px dashed var(--hz-deep); background: repeating-linear-gradient(45deg, var(--hz-soft) 0 2px, transparent 2px 5px); border-radius: 2px; }
+.ly-context { height: 0; width: 16px; border-top: 2px dotted var(--muted); }
+.attr { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.chart { display: block; width: 100%; height: auto; overflow: visible; }
+.c-bar { fill: var(--hz-soft); }
+.c-obs { fill: none; stroke: var(--hz-line); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.c-pred { fill: none; stroke: var(--hz); stroke-width: 2.2; stroke-dasharray: 6 5; stroke-linecap: round; }
+.c-band { fill: var(--hz-band); }
+.c-now { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 3; }
+.c-th { stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 1.5 4; stroke-linecap: round; }
+.c-ax { font-size: 11.5px; fill: var(--muted); font-family: var(--f); }
+.c-nowt { font-size: 11.5px; font-weight: 600; fill: var(--ink-2); font-family: var(--f); }
+
+/* ---------- fire / flood toggle (animated icons) ---------- */
+.hzt { --t-c: var(--fire); --t-pale: var(--fire-pale); position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 4px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); flex: none; }
+.hzt[data-hz="flood"] { --t-c: var(--flood); --t-pale: var(--flood-pale); }
+.hzt-ind { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 999px; background: var(--t-pale); box-shadow: inset 0 0 0 1.5px var(--t-c); transition: transform .5s var(--ease), background-color .5s, box-shadow .5s; }
+.hzt[data-hz="flood"] .hzt-ind { transform: translateX(100%); }
+.hzt button { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 14px; border: 0; background: none; color: var(--muted); font-weight: 650; font-size: 14px; cursor: pointer; white-space: nowrap; transition: color .35s; }
+.hzt button[aria-checked="true"] { color: var(--ink); }
+.hzt button:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; border-radius: 999px; }
+.ico { width: 20px; height: 20px; flex: none; overflow: visible; }
+.ico-flood path { fill: transparent; stroke: currentColor; stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; transform-box: fill-box; transition: fill .45s, stroke .45s; }   /* off: outline of the logo part; half the stroke is clipped away, leaving a 0.8px inner line */
+.ico-flood path { transform-origin: 50% 50%; }
+.ico-fire .fl-outer { fill: transparent; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; transform-box: fill-box; transform-origin: 50% 100%; transition: fill .45s, stroke .45s; }
+.ico-fire .fl-inner { fill: var(--amber); opacity: 0; transform-box: fill-box; transform-origin: 50% 100%; transform: scale(.4, .2); transition: opacity .35s, transform .5s var(--ease); }
+.hzt[data-hz="fire"] .ico-fire .fl-outer { fill: var(--fire); stroke: var(--fire-deep); animation: fl-sway 3.2s ease-in-out infinite; }
+.hzt[data-hz="fire"] .ico-fire .fl-inner { opacity: 1; transform: none; animation: fl-flick 1.7s ease-in-out .2s infinite; }   /* inner flame grows in and flickers */
+.hzt[data-hz="flood"] .ic-wave { fill: var(--flood-mid); stroke: transparent; animation: wv-bob 2.6s ease-in-out infinite; }
+@keyframes fl-sway { 0%, 100% { transform: skewX(0) scaleY(1); } 50% { transform: skewX(-3deg) scaleY(1.03); } }
+@keyframes fl-flick { 0%, 100% { transform: scale(1, 1); } 35% { transform: scale(.92, 1.1); } 70% { transform: scale(1.05, .94); } }
+@keyframes wv-bob { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-1px, -1.2px); } }
+
+/* ---------- Leaflet map (Esri tiles), themed ---------- */
+.lmap { position: absolute; inset: 0; z-index: 0; isolation: isolate; background: var(--map-land); }   /* isolation keeps Leaflet's panes below the panels */
+.lmap.leaflet-container { font: inherit; background: var(--map-land); }
+.lmap .leaflet-overlay-pane canvas { transition: opacity .2s; } .lmap.is-flying .leaflet-overlay-pane canvas { opacity: 0; transition: none; }   /* the dot canvas is CSS-scaled mid-flight, so hide it until the flight ends */
+.lmap svg.fallback { width: 100%; height: 100%; display: block; }
+.m-cell { opacity: var(--cell-op); }
+.m-cell.l1 { fill: var(--r1); } .m-cell.l2 { fill: var(--r2); } .m-cell.l3 { fill: var(--r3); } .m-cell.l4 { fill: var(--r4); }
+.m-wind { stroke: var(--faint); fill: none; stroke-linecap: round; opacity: .7; }
+.m-river { fill: none; stroke: var(--line-2); stroke-width: 6; stroke-linecap: round; }
+.lm-pt { fill: var(--hz); stroke: #25272C; stroke-width: 1; fill-opacity: 1; }
+.lm-gauge { background: var(--surface); border: 2px solid var(--flood-line); }
+.lm-mk { position: relative; }
+.lm-k { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); color: var(--ink); border: 1.5px solid var(--ink); font: 700 12px/1 var(--f); box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
+.lm-mk.on .lm-k { background: var(--ink); color: var(--bg); outline: 2px solid var(--ink); outline-offset: 3px; }
+.lm-mk.lm-focus::after { content: ''; position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--hz-deep); animation: lm-pulse 1.6s ease-out infinite; pointer-events: none; }   /* pulsing ring on the selected fire */
+.lm-mk.lm-focus .lm-lab { background: var(--ink); color: var(--bg); }
+@keyframes lm-pulse { from { transform: scale(1); opacity: .9; } to { transform: scale(2.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .lm-mk.lm-focus::after { animation: none; transform: scale(1.6); } }
+.lm-mk:focus-visible .lm-k { outline: 2px solid var(--hz-deep); outline-offset: 3px; }
+.lm-lab { position: absolute; left: 30px; top: 3px; white-space: nowrap; padding: 1px 7px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 90%, transparent); color: var(--ink); font: 650 12.5px/18px var(--f); box-shadow: 0 1px 2px rgba(0, 0, 0, .15); }
+
+/* =====================================================================
+   OVERVIEW (concept 07, rearranged so every piece sits near its map-view spot)
+   ===================================================================== */
+.ov { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "hd hd" "hero right" "foot foot"; column-gap: 64px; padding: 22px 56px 24px; }
+.ov > * { pointer-events: auto; }
+.ov-hd { grid-area: hd; display: flex; align-items: center; gap: 28px; padding-bottom: 14px; }
+.ov-hero { grid-area: hero; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; min-height: 0; }
+.ov-eye { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; font-size: 15px; color: var(--muted); }
+.ov-eye b { color: var(--ink); font-weight: 600; }
+.num { display: flex; align-items: baseline; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ov-num { font-size: 170px; font-weight: 300; letter-spacing: -.055em; margin: 14px 0 6px -8px; }
+.ov-num .pct { font-size: .47em; letter-spacing: 0; color: var(--hz-text); margin-left: 6px; }
+.ov-cap { font-size: 18px; color: var(--ink-2); }
+.ov-row { display: flex; align-items: center; gap: 28px; margin-top: 24px; }
+.ov-conf { font-size: 15px; color: var(--muted); }
+.cta { display: inline-flex; align-items: center; gap: 10px; margin-top: 30px; padding: 12px 20px; border: 1px solid var(--ink); border-radius: 999px; background: var(--ink); color: var(--bg); font-size: 15px; font-weight: 650; cursor: pointer; white-space: nowrap; transition: opacity .2s; }
+.cta:hover { opacity: .9; }
+.cta svg { width: 17px; height: 17px; }
+.cta-ph { visibility: hidden; pointer-events: none; }   /* Flood has no past-fire button; this keeps its space so the centred hero doesn't jump on toggle */
+.ov-right { grid-area: right; display: flex; flex-direction: column; min-height: 0; pointer-events: none; }   /* clicks pass through to the map in the slot */
+.ov-right > * { pointer-events: auto; }
+.ov-slot { position: relative; flex: 1; min-height: 160px; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--line); pointer-events: none !important; }
+.ov-go { position: absolute; left: 12px; bottom: 12px; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); cursor: pointer; pointer-events: auto; }   /* small shortcut into the map view */
+.ov-go:hover { background: var(--surface-2); }
+.ov-go:focus-visible { outline: 2px solid var(--hz-deep); outline-offset: 2px; }
+.ov-go svg { width: 16px; height: 16px; }
+.ov-attr { align-self: flex-end; max-width: 100%; margin-top: 6px; }
+.ov-cells { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 10px; }
+.ov-cell { border: 0; background: none; padding: 2px 0; cursor: pointer; font-size: 15px; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
+.ov-cell b { color: var(--ink-2); font-weight: 600; margin-right: 6px; }
+.ov-cell[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--hz); }
+.ov-layers { margin-top: 12px; }
+.ov-layers .ly { color: var(--muted); }
+.ov-foot { grid-area: foot; display: grid; gap: 14px; padding-top: 16px; }   /* tighter footer so the map gets the height */
+.ov-meas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px; }
+.mrow { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ml { font-size: 15px; color: var(--ink-2); }
+.ml small { display: block; font-size: 13px; color: var(--muted); }
+.mv { font-size: 38px; font-weight: 350; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; line-height: 1.15; }
+.mv u { text-decoration: none; font-size: 17px; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
+.ov-sh { margin-top: 8px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.ov-spark-l { position: relative; height: 16px; font-size: 12.5px; color: var(--muted); }
+.ov-spark-l span { position: absolute; top: 0; }
+.ov-spark-l span:nth-child(2) { left: 47.8%; transform: translateX(-50%); font-weight: 600; color: var(--ink-2); }
+.ov-spark-l span:nth-child(3) { right: 0; }
+
+/* =====================================================================
+   MAP VIEW (concept 05): full-bleed map, three floating panels
+   ===================================================================== */
+.mv-layer > * { pointer-events: auto; }
+.fp { position: absolute; z-index: 2; isolation: isolate; }
+.pbg { position: absolute; inset: 0; z-index: -1; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--soft-shadow); }
+.fp1 { left: 24px; top: 24px; width: 384px; padding: 18px 22px 20px; display: grid; gap: 14px; }
+.fp1-top { display: flex; align-items: center; gap: 10px; }
+.fp1-r2 { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cta.back { margin: 0; padding: 7px 14px; background: transparent; color: var(--ink); border-color: var(--line-2); font-size: 14px; }
+.cta.back:hover { background: var(--surface-2); opacity: 1; }
+.fp1 h2 { font-size: 20px; font-weight: 700; line-height: 1.3; letter-spacing: -.01em; }
+.fp1-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.fp1-row .rk { flex-direction: column; align-items: center; gap: 6px; font-size: 17px; }   /* bars on top, risk word below; smaller so the row has room */
+.fp1-row .tk i.on, .ov-row .tk i.on, .fp2 .tk i.on { background: var(--rcd); }   /* darker risk colours everywhere bars appear: overview, map summary, fire details + list */
+.fp1-row .cf-l { white-space: nowrap; }   /* "fire detections" on one line */
+.pr { display: flex; flex-direction: column; gap: 3px; }
+.mv-num { font-size: 30px; font-weight: 800; letter-spacing: -.01em; }
+.mv-num .pct { font-size: 1em; letter-spacing: 0; color: var(--ink); margin-left: 1px; }
+.pr-l, .cf span { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
+.cf { display: flex; align-items: center; gap: 8px; }
+.fp1-row .cf { flex-direction: column; align-items: flex-start; gap: 3px; }   /* count on its own line, label below, like the index */
+.fp2 { right: 24px; top: 24px; bottom: 24px; width: 330px; padding: 20px 18px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.selp-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.selp-id { font-family: var(--f-mono); font-size: 12.5px; color: var(--muted); }
+.selp-name { font-size: 22px; font-weight: 700; line-height: 1.2; align-self: flex-start; }
+.selp-dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
+.selp-dl dt { font-size: 12.5px; color: var(--muted); }
+.selp-dl dd { font-weight: 650; font-size: 15.5px; font-variant-numeric: tabular-nums; }
+.selp-win { font-size: 12.5px; color: var(--muted); }
+.fp-h { font-size: 13px; font-weight: 700; color: var(--muted); }
+.its { display: grid; gap: 2px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 10px; scrollbar-width: thin; scrollbar-gutter: stable; }   /* gap between the rows and the scroll bar */
+.it { width: 100%; display: grid; grid-template-columns: 20px minmax(0, 1fr) auto 42px; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; text-align: left; cursor: pointer; transition: background-color .2s; }
+.it:hover { background: var(--surface-2); }
+.it.on { background: var(--hz-pale); }
+.it-n { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.it-name { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.it-name small { display: block; font-weight: 500; font-size: 12.5px; color: var(--muted); }
+.it .rk { font-size: 13.5px; }
+.it .tk i { width: 6px; } .it .tk i.on { background: var(--rcd); }   /* list shows bars only, so they need more contrast */
+.it-p { font-variant-numeric: tabular-nums; font-weight: 650; text-align: right; }
+.fp3 { left: 24px; right: 378px; bottom: 30px; padding: 16px 20px; display: grid; grid-template-columns: 1.1fr 1fr; gap: 22px; align-items: center; }
+.fp3:not(.m-fp3) { padding-left: 36px; }   /* more room left of Temperature and Humidity */
+.mss { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; }
+.ms { display: flex; flex-direction: column; gap: 2px; min-width: 0; align-items: flex-start; }
+.ms-l { font-size: 13px; color: var(--muted); font-weight: 500; }
+.ms-v { font-size: 22px; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.12; white-space: nowrap; }
+.ms-u { font-size: .55em; font-weight: 550; color: var(--muted); margin-left: 4px; }
+.fp3-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; font-size: 13px; font-weight: 700; }
+.zm { position: absolute; z-index: 2; right: 378px; top: 24px; display: flex; flex-direction: column; border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; background: var(--surface); box-shadow: var(--soft-shadow); }
+.zm button { width: 34px; height: 34px; border: 0; background: none; font-size: 18px; font-weight: 600; cursor: pointer; }
+.zm button + button { border-top: 1px solid var(--line); }
+.zm button:hover { background: var(--surface-2); }
+.mv-attr { position: absolute; z-index: 2; left: 24px; bottom: 7px; max-width: calc(100% - 410px); }
+
+/* re-render after a fire / flood switch */
+.is-swapping :is([data-k], .pc):not([data-k="tog"], [data-k="brand"], [data-k="thm"], .ov-slot) { animation: swap-in .42s ease both; }
+.is-swapping .num { animation: swap-in .42s ease both; }
+@keyframes swap-in { from { opacity: .2; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- shorter desktop windows ---------- */
+@media (max-height: 780px) and (min-width: 821px) {
+  .ov-num { font-size: 128px; margin-top: 8px; }
+  .ov-row { margin-top: 16px; } .cta { margin-top: 22px; }
+  .mv { font-size: 32px; }
+  .ml small { display: none; }
+  .fp1 h2 { font-size: 18px; }
+}
+@media (max-width: 1100px) and (min-width: 821px) {
+  .ov { padding: 20px 32px; column-gap: 36px; }
+  .ov-num { font-size: 132px; }
+  .mv { font-size: 30px; }
+  .fp2 { width: 300px; } .fp3 { right: 348px; grid-template-columns: 1fr; } .fp3-c { display: none; } .zm { right: 348px; } .mv-attr { max-width: calc(100% - 380px); }
+}
+
+/* ---------- phones ---------- */
+@media (max-width: 820px) {
+  .ov { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; grid-template-areas: "hd" "hero" "right" "foot"; padding: 12px 16px 14px; row-gap: 10px; }
+  .ov-hd { flex-wrap: wrap; gap: 10px 12px; padding-bottom: 0; }
+  .ov-hd .sp { display: none; }
+  .ov-hd [data-k="thm"] { margin-left: auto; }
+  .ov-num { font-size: 96px; margin: 4px 0 2px -4px; }
+  .ov-cap { font-size: 15px; }
+  .ov-row { margin-top: 10px; gap: 18px; }
+  .rk.xl { font-size: 22px; gap: 9px; } .rk.xl .tk i { width: 7px; height: 20px; } .rk.xl .tk i:nth-child(1) { height: 9px; } .rk.xl .tk i:nth-child(2) { height: 13px; } .rk.xl .tk i:nth-child(3) { height: 17px; }
+  .ov-conf { font-size: 13.5px; }
+  .cta { margin-top: 12px; padding: 10px 16px; font-size: 14.5px; }
+  .ov-cells { gap: 4px 16px; margin-top: 8px; }
+  .ov-cell { font-size: 13.5px; }
+  .ov-layers, .ov-sh, .ov-spark, .ov-spark-l { display: none; }
+  .ov-foot { padding-top: 0; }
+  .ov-meas { gap: 10px; }
+  .ml { font-size: 12px; line-height: 1.25; } .ml small { display: none; }
+  .mv { font-size: 22px; letter-spacing: -.02em; } .mv u { font-size: 12px; margin-left: 3px; }
+
+  .fp1 { left: 12px; right: 12px; top: 12px; width: auto; padding: 14px 16px; gap: 10px; }
+  .fp1 h2, .fp1 [data-k="layers"], .fp1 hr:last-of-type { display: none; }
+  .fp1-row { gap: 8px; }
+  .fp2 { left: 12px; right: 12px; top: auto; bottom: 26px; width: auto; max-height: 40%; padding: 14px 14px; gap: 8px; overflow: auto; }
+  .fp2 .selp-dl, .fp2 .selp-win { display: none; }
+  .fp3, .zm { display: none; }
+  .mv-attr { left: 12px; bottom: 6px; max-width: calc(100% - 24px); }
+}
+
+/* =====================================================================
+   TRAINING DATA DIALOG — stats from skyalert/output.txt
+   ===================================================================== */
+:root, [data-theme="light"] { --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; }   /* categorical slots, validated on #FFFFFF */
+[data-theme="dark"] { --s1: #3987e5; --s2: #d95926; --s3: #199e70; }              /* validated on #32353B */
+.dsb { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); font-size: 14px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+.dsb:hover { background: var(--surface-2); }
+.dsb svg, .thb.dsi svg { width: 16px; height: 16px; }
+.ds { width: min(980px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); color: var(--ink); box-shadow: var(--soft-shadow); overflow: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.ds::backdrop { background: rgba(20, 21, 24, .42); }
+.ds-in { padding: 26px 30px 30px; display: grid; gap: 26px; }
+.ds-hd { display: flex; align-items: flex-start; gap: 16px; }
+.ds-eye { font-size: 13px; font-weight: 650; color: var(--hz-text); }
+.ds-hd h2 { font-size: 26px; font-weight: 750; letter-spacing: -.015em; line-height: 1.2; margin-top: 2px; }
+.ds-sub { font-size: 14px; color: var(--muted); margin-top: 6px; max-width: 64ch; }
+.ds-sub code, .ds-note code { font-family: var(--f-mono); font-size: .92em; }
+.ds-note { font-size: 13.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 10px; padding: 10px 14px; }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tile-l { font-size: 12.5px; color: var(--muted); font-weight: 550; }
+.tile-v { font-size: 28px; font-weight: 400; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
+.tile-v u { text-decoration: none; font-size: 14px; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+.tile-s { font-size: 12.5px; color: var(--muted); }
+.cs { display: grid; gap: 12px; }
+.cs-hd { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.cs-hd h3 { font-size: 16px; font-weight: 700; }
+.cs-tk { font-size: 13.5px; color: var(--ink-2); }
+.tvb { border: 1px solid var(--line-2); background: none; border-radius: 8px; padding: 3px 10px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.tvb:hover { background: var(--surface-2); }
+.key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.key i { width: 10px; height: 10px; border-radius: 3px; }
+.key .k-span { width: 22px; height: 8px; border-radius: 4px; background: var(--line-2); }
+.key .k-mean { width: 2px; height: 12px; border-radius: 1px; background: var(--ink); }
+/* shared row layout: label column + plot column with a recessive grid */
+.pl { display: grid; grid-template-columns: 190px minmax(0, 1fr); column-gap: 16px; padding-right: 30px; }   /* room for the end labels */
+.pl-row { display: contents; }
+.pl-lab { font-size: 13.5px; color: var(--ink-2); padding: 7px 0; line-height: 1.25; min-width: 0; }
+.pl-lab b { display: block; font-weight: 650; color: var(--ink); font-family: var(--f-mono); font-size: 12.5px; }
+.pl-lab small { color: var(--muted); font-size: 12px; }
+.pl-plot { position: relative; padding: 7px 0; border-left: 1px solid var(--line-2); background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: 25% 100%; background-position: -1px 0; }
+.pl-axis { grid-column: 2; position: relative; height: 18px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pl-axis span { position: absolute; top: 3px; transform: translateX(-50%); white-space: nowrap; }
+.pl-axis span:first-child { transform: none; } .pl-axis span:last-child { transform: translateX(-100%); }
+/* grouped bars: thin, 2px gap, rounded data-end anchored at the baseline */
+.gb { display: grid; gap: 2px; }
+.gb-r { display: flex; align-items: center; gap: 6px; height: 9px; }
+.gb-b { height: 9px; border-radius: 0 4px 4px 0; flex: none; }
+.gb-v { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1; }
+.gb-r.s1 .gb-b { background: var(--s1); } .gb-r.s2 .gb-b { background: var(--s2); } .gb-r.s3 .gb-b { background: var(--s3); }
+/* band ranges: min–max span with a mean tick, on the full uint16 scale */
+.rg { position: relative; height: 22px; }
+.rg-span { position: absolute; top: 7px; height: 8px; border-radius: 4px; background: var(--line-2); }
+.rg-sat { position: absolute; top: 4px; width: 4px; height: 14px; border-radius: 2px; background: var(--hz-deep); transform: translateX(-100%); }
+.rg-mean { position: absolute; top: 3px; width: 2px; height: 16px; border-radius: 1px; background: var(--ink); box-shadow: 0 0 0 2px var(--surface); transform: translateX(-1px); }
+.hit { cursor: default; }
+.hit:hover .gb-b, .hit:hover .rg-span { filter: brightness(1.08); }
+.hit:hover .pl-lab, .pl-row:hover .pl-lab { color: var(--ink); }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.tbl th, .tbl td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tbl th { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.tbl th:first-child, .tbl td:first-child, .tbl .tl { text-align: left; }
+.tbl-wrap { overflow-x: auto; }
+.tip { position: fixed; z-index: 10; pointer-events: none; padding: 8px 11px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 12.5px; line-height: 1.45; box-shadow: var(--soft-shadow); max-width: 260px; }
+.tip[hidden] { display: none; }
+.tip b { font-weight: 700; }
+.tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.ds-bar { display: flex; align-items: center; gap: 12px; margin-bottom: -6px; min-width: 0; }
+.ds-in > *, .ds-body > * { min-width: 0; }   /* let wide rows shrink instead of widening the dialog */
+.tabs { display: flex; flex: 0 1 auto; min-width: 0; gap: 4px; padding: 4px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface-2); overflow-x: auto; scrollbar-width: none; }
+.tab { border: 0; background: none; padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 650; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.ds-body { display: grid; gap: 26px; }
+.tiles.t3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.exs { display: grid; gap: 18px; }
+.ex { border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid; gap: 10px; }
+.ex-imgs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ex-imgs figure { margin: 0; display: grid; gap: 6px; }
+.ex-imgs img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--surface-3); }
+.ex-imgs figcaption { font-size: 12.5px; color: var(--muted); font-weight: 550; }
+.ex-st { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font-size: 14px; }
+.ex-st b { font-weight: 700; }
+.ex-st span { color: var(--muted); font-size: 13px; }
+.ds-empty { padding: 30px 0 10px; display: grid; gap: 8px; justify-items: start; }
+.ds-empty p { color: var(--ink-2); max-width: 56ch; }
+@media (max-width: 820px) {
+  .ds { width: calc(100vw - 32px); max-height: calc(100dvh - 32px); }
+  .ds-in { padding: 18px 16px 22px; gap: 20px; }
+  .ds-hd h2 { font-size: 21px; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tiles.t3 { grid-template-columns: 1fr; }
+  .ex { padding: 8px; } .ex-imgs { gap: 6px; } .ex-imgs figcaption { font-size: 11.5px; }
+  .ds-bar { align-items: flex-start; }
+  .tile-v { font-size: 22px; }
+  .pl { grid-template-columns: 104px minmax(0, 1fr); column-gap: 10px; }
+  .pl-lab small { display: none; }
+  .ov-hd .dsb span { display: none; } .ov-hd .dsb { padding: 0 9px; }
+}
+
+/* =====================================================================
+   MODEL ON A PAST FIRE (map mode)
+   ===================================================================== */
+.msw { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); }
+.msw button { flex: 1; border: 0; background: none; padding: 7px 10px; border-radius: 9px; font-size: 13.5px; font-weight: 650; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.msw button:hover { color: var(--ink); }
+.msw button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.cta.ghost { margin-top: 12px; background: transparent; color: var(--ink); border-color: var(--line-2); }
+.cta.ghost:hover { background: var(--surface-2); opacity: 1; }
+.m-stats { display: grid; grid-template-columns: auto 1fr 1fr; gap: 14px; align-items: end; }
+.m-stats .pr-l { max-width: 13ch; }
+.mv-num2 { font-size: 22px; font-weight: 800; letter-spacing: -.01em; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ly-sat { border-radius: 3px; background: linear-gradient(135deg, #6a8f3a, #3c4fa8); }
+.ly-model { border-radius: 3px; background: #ED2119; }
+.ly-label { border-radius: 3px; background: #FFB30D; }
+.m-meter { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
+.m-meter i { display: block; height: 100%; border-radius: 4px; background: var(--fire-deep); }
+.fp2 .ex-imgs { gap: 6px; }
+.fp2 .ex-imgs figcaption { font-size: 11.5px; }
+.it-p small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+.fp3.m-fp3 { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.mss.m-sp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.m-sp-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.m-sp-h b { font-size: 15px; font-weight: 750; }
+.m-sp-h span { font-size: 13px; color: var(--muted); }
+.m-sp-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.m-ex { display: grid; gap: 5px; min-width: 0; }
+.m-ex-imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.m-ex-imgs img { width: 100%; height: auto; aspect-ratio: 1; display: block; border-radius: 6px; }
+.m-ex p { font-size: 12.5px; color: var(--ink-2); line-height: 1.3; }
+.m-ex p b { font-weight: 700; color: var(--ink); }
+.m-ex p small { display: block; color: var(--muted); font-size: 11.5px; }
+.m-px { image-rendering: pixelated; }
+.m-tile-k { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--surface); color: var(--ink); border: 1.5px solid var(--ink); font: 700 12px/1 var(--f); box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
+.m-tile-k.on { background: var(--ink); color: var(--bg); }
+@media (max-width: 1100px) and (min-width: 821px) { .m-sp-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fp3.m-fp3 .fp3-c { display: block; } }
+@media (max-width: 820px) { .m-stats { grid-template-columns: auto 1fr; } .m-stats .pr:last-child { display: none; } .fp1 .msw { display: flex; } }
+
+/* =====================================================================
+   LIVE DATA
+   ===================================================================== */
+.smp.live { color: var(--ink-2); border-style: solid; border-color: var(--hz-line); gap: 6px; }
+.smp.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--hz-deep); }
+.cf .cf-n { font-size: 30px; color: var(--ink); font-weight: 800; letter-spacing: -.01em; line-height: 1; font-variant-numeric: tabular-nums; }
+.rs { display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.rs li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 6px; line-height: 1.35; }
+.rs li::before { content: "▲"; font-size: 9px; line-height: 18px; color: var(--hz-deep); }
+.rs li.rs-lowers::before { content: "▼"; color: var(--muted); }
+.ly input:disabled + .ly-g, .ly input:disabled ~ span { opacity: .55; }
+.ly:has(input:disabled) { cursor: default; }
+.lm-pick .lm-k { background: var(--hz-deep); color: #fff; border-color: var(--hz-deep); }
+.loader { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: var(--bg); color: var(--ink-2); font-size: 15px; }
+.loader[hidden] { display: none; }
+.loader div { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 16px; }
+.loader i { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--line-2); border-top-color: var(--fire-deep); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.banner { position: fixed; z-index: 15; left: 50%; top: 12px; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 8px 14px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 13px; box-shadow: var(--soft-shadow); }
+.banner[hidden] { display: none; }
+.banner code { font-family: var(--f-mono); font-size: .92em; }
+.busy-dot { position: absolute; z-index: 3; left: 50%; bottom: 40px; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--soft-shadow); font-size: 12.5px; color: var(--ink-2); pointer-events: none; }
+.busy-dot[hidden] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app" data-hz="fire" data-view="ov">
+  <div class="lmap" id="map" role="region" aria-label="Map of predicted risk, sample data"></div>
+  <main class="layer ov" id="ov" aria-label="Overview"></main>
+  <main class="layer mv-layer" id="mv" aria-label="Map view" hidden></main>
+  <div class="flyer" id="flyer" aria-hidden="true" hidden><span class="fn"></span><span class="pct">%</span></div>
+  <div class="sr-only" aria-live="polite" id="live"></div>
+</div>
+<dialog class="ds" id="ds" aria-labelledby="ds-title"></dialog>
+<div class="tip" id="tip" role="tooltip" hidden></div>
+<div class="loader" id="loader" role="status"><div><i aria-hidden="true"></i><span>Loading today's fires from NASA FIRMS…</span></div></div>
+<div class="banner" id="banner" role="status" hidden></div>
+<div class="busy-dot" id="busyDot" role="status" hidden>Updating fires in view…</div>
+
+<!-- Leaflet for the real basemap; without it (offline) the map falls back to an SVG sketch -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const store = {
+    get(k) { try { return localStorage.getItem('skyalert-flow-' + k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem('skyalert-flow-' + k, v); } catch { /* not remembered */ } },
+  };
+  const f1 = (v) => Math.round(v * 10) / 10;
+
+  // =====================================================================
+  // SAMPLE DATA (same as ui-playground.html)
+  // =====================================================================
+  const RISK = ['', 'Low', 'Moderate', 'High', 'Critical'];
+  const DATA = {
+    fire: {
+      key: 'fire', region: 'Sample region R‑12', model: 'fire‑risk v0.3', window: 'Next 48 h',
+      headline: 'Fire risk is predicted to stay high through Thursday',
+      risk: 3, prob: 72, conf: 81, probLabel: 'Probability of significant fire activity', regionLabel: 'region probability',
+      meas: [
+        { l: 'Temperature', v: '34', u: '°C', s: '6° above normal' },
+        { l: 'Wind', v: '24', u: 'km/h', s: 'From NW, gusts 41' },
+        { l: 'Humidity', v: '12', u: '%', s: 'Very dry' },
+        { l: 'Fuel moisture', v: '8', u: '%', s: 'Critical below 10 %' },
+      ],
+      metricName: 'Max FRP',
+      series: { name: 'Fire risk index', max: 100,
+        obs: [38, 41, 44, 47, 52, 55, 60, 63, 66, 69, 71, 72], pred: [74, 76, 78, 80, 79, 77, 74, 71, 68, 66, 63, 61],
+        spread: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], bars: [3, 5, 4, 8, 11, 9, 14, 18, 16, 21, 17, 12], threshold: 70 },
+      items: [
+        { id: 'R‑12‑D', name: 'North Slope', risk: 4, prob: 86, conf: 84, metric: '61.0 MW', evidence: '23 detections', window: 'Prediction window Oct 28 12:00 – Oct 30 12:00 UTC', pos: [300, 64] },
+        { id: 'R‑12‑A', name: 'Cedar Ridge', risk: 3, prob: 72, conf: 81, metric: '48.2 MW', evidence: '14 detections', window: 'Prediction window Oct 28 12:00 – Oct 30 12:00 UTC', pos: [212, 104] },
+        { id: 'R‑12‑B', name: 'Juniper Flats', risk: 2, prob: 54, conf: 76, metric: '21.6 MW', evidence: '6 detections', window: 'Prediction window Oct 28 12:00 – Oct 30 12:00 UTC', pos: [128, 168] },
+        { id: 'R‑12‑C', name: 'Ash Hollow', risk: 1, prob: 22, conf: 69, metric: '6.4 MW', evidence: '1 detection', window: 'Prediction window Oct 28 12:00 – Oct 30 12:00 UTC', pos: [76, 222] },
+      ],
+      layers: { observed: 'Detections', predicted: 'Predicted risk', context: 'Wind and terrain' },
+    },
+    flood: {
+      key: 'flood', region: 'Sample basin B‑04', model: 'flood‑unet v0.1', window: 'Next 48 h',
+      headline: 'Flood risk is predicted to peak tomorrow along Basin B‑04',
+      risk: 3, prob: 63, conf: 74, probLabel: 'Probability of inundation', regionLabel: 'basin probability',
+      meas: [
+        { l: 'Rain intensity', v: '14', u: 'mm/h', s: 'Peak at 05:00' },
+        { l: 'Accumulated rain', v: '86', u: 'mm', s: 'Last 24 h' },
+        { l: 'Water level', v: '+2.1', u: 'm', s: 'Gauge G‑07, above flood stage' },
+        { l: 'Soil saturation', v: '92', u: '%', s: 'Near capacity' },
+      ],
+      metricName: 'Inundation',
+      series: { name: 'Water level, gauge G‑07', max: 3,
+        obs: [0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.7, 1.9, 2.0, 2.1], pred: [2.2, 2.4, 2.5, 2.6, 2.6, 2.5, 2.3, 2.1, 1.9, 1.7, 1.5, 1.4],
+        spread: [.08, .1, .13, .16, .19, .22, .25, .28, .31, .34, .37, .4], bars: [2, 4, 6, 9, 12, 14, 11, 8, 6, 5, 3, 2], threshold: 2.0 },
+      items: [
+        { id: 'B‑04‑4', name: 'Mill Creek outlet', risk: 4, prob: 81, conf: 78, metric: '5.1 km²', evidence: '86 mm rain', window: 'Prediction window Oct 29 00:00 – Oct 30 00:00 UTC', pos: [332, 206] },
+        { id: 'B‑04‑1', name: 'Lower Mill basin', risk: 3, prob: 68, conf: 74, metric: '3.4 km²', evidence: 'Gauge +2.1 m', window: 'Prediction window Oct 29 00:00 – Oct 30 00:00 UTC', pos: [250, 164] },
+        { id: 'B‑04‑2', name: 'Riverside lowlands', risk: 2, prob: 51, conf: 71, metric: '1.2 km²', evidence: '61 mm rain', window: 'Prediction window Oct 29 00:00 – Oct 30 00:00 UTC', pos: [146, 112] },
+        { id: 'B‑04‑3', name: 'Harbor shore', risk: 1, prob: 19, conf: 66, metric: '0.2 km²', evidence: 'Tide +0.4 m', window: 'Prediction window Oct 29 00:00 – Oct 30 00:00 UTC', pos: [64, 64] },
+      ],
+      layers: { observed: 'Gauges and rain', predicted: 'Predicted inundation', context: 'Rivers and terrain' },
+    },
+  };
+
+  // ---------- model-output raster fields (deterministic) ----------
+  const RIVER = [[0, 40], [52, 52], [104, 80], [150, 100], [200, 130], [250, 152], [300, 180], [346, 208], [400, 238]];
+  const hash = (x, y) => { const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return s - Math.floor(s); };
+  function riverDist(x, y) {
+    let m = 1e9;
+    for (let i = 0; i < RIVER.length - 1; i++) {
+      const [ax, ay] = RIVER[i], [bx, by] = RIVER[i + 1], dx = bx - ax, dy = by - ay;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
+      m = Math.min(m, Math.hypot(ax + t * dx - x, ay + t * dy - y));
+    }
+    return m;
+  }
+  DATA.fire.field = (x, y) => {
+    let v = 0;
+    for (const it of DATA.fire.items) { const [ix, iy] = it.pos; v = Math.max(v, (it.risk / 4) * Math.exp(-((x - ix) ** 2 + (y - iy) ** 2) / (2 * 46 * 46))); }
+    if (riverDist(x, y) < 16) v *= 0.25;                     // the river breaks the fuel bed
+    return v + 0.14 * (hash(x, y) - 0.5);
+  };
+  DATA.flood.field = (x, y) => {
+    const rd = riverDist(x, y);
+    if (rd < 6) return 0;                                     // the permanent channel is not "flood"
+    let v = Math.exp(-(rd * rd) / (2 * 24 * 24)) * 0.46 * (0.55 + (x / 400) * 0.7);
+    for (const it of DATA.flood.items) { const [ix, iy] = it.pos; v = Math.max(v, (it.risk / 4) * Math.exp(-((x - ix) ** 2 + (y - iy) ** 2) / (2 * 30 * 30)) * (rd < 40 ? 1 : 0.5)); }
+    return v + 0.1 * (hash(x, y) - 0.5);
+  };
+  DATA.fire.points = DATA.fire.items.flatMap((it, i) => Array.from({ length: it.risk * 3 }, (_, k) => [it.pos[0] + (hash(i * 7 + k, 3) - 0.5) * 54, it.pos[1] + (hash(k, i * 5 + 1) - 0.5) * 44]));
+  DATA.flood.points = [[246, 144], [158, 94], [318, 188], [92, 62], [372, 222]];
+
+  // =====================================================================
+  // STATE
+  // =====================================================================
+  const prefersDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const S = { hz: 'fire', theme: store.get('theme') || (prefersDark ? 'dark' : 'light'), view: 'ov', sel: 0, layers: { observed: true, predicted: true, context: true }, mode: 'live', mSel: 0, mLayers: { sat: false, label: true, model: true } };
+  const APP = $('#app'), OV = $('#ov'), MV = $('#mv'), FLY = $('#flyer'), MAPEL = $('#map'), LIVE = $('#live');
+  const REDUCE = matchMedia('(prefers-reduced-motion: reduce)');
+  let busy = false;
+  const active = () => (S.view === 'ov' ? OV : MV);
+
+  // =====================================================================
+  // BUILDING BLOCKS
+  // =====================================================================
+  const LG = { flame: 'M178.0 3.5C182.2 1.6 181.5 2.6 184.0 3.3C186.5 4.1 188.3 4.3 193.0 7.8C197.7 11.3 206.1 18.6 212.0 24.3C217.9 30.0 220.6 32.9 228.4 42.0C236.3 51.1 246.5 62.5 259.1 79.0C271.7 95.5 292.7 134.1 304.0 140.7C315.3 147.3 322.4 122.3 327.0 118.5C331.6 114.7 326.4 105.3 331.7 118.0C337.0 130.7 352.0 172.3 358.7 195.0C365.3 217.7 368.9 236.7 371.6 254.0C374.3 271.3 374.5 285.2 374.8 299.0C375.2 312.8 375.0 323.7 373.7 337.0C372.3 350.3 369.8 366.5 366.7 379.0C363.5 391.5 359.4 402.4 354.6 412.0C349.8 421.6 345.4 428.1 338.0 436.8C330.6 445.4 320.8 454.8 310.0 463.8C299.2 472.8 286.7 482.0 273.0 490.6C259.3 499.3 235.7 511.7 228.0 515.8C220.3 519.8 223.8 518.8 226.8 515.0C229.8 511.2 241.1 499.2 246.0 493.0C250.9 486.8 252.5 484.7 256.2 478.0C259.9 471.3 265.4 459.8 268.2 453.0C271.1 446.2 272.0 442.0 273.2 437.0C274.4 432.0 275.0 429.5 275.4 423.0C275.7 416.5 276.4 406.3 275.2 398.0C274.1 389.7 269.0 377.1 268.6 373.0C268.3 368.9 270.9 372.5 273.0 373.6C275.1 374.7 277.2 375.3 281.0 379.5C284.8 383.7 293.0 395.3 296.0 398.8C299.0 402.2 297.3 401.1 299.0 400.1C300.7 399.2 303.2 399.5 306.2 393.0C309.2 386.5 315.0 370.8 317.1 361.0C319.2 351.2 318.8 344.8 318.8 334.0C318.8 323.2 318.4 308.2 317.1 296.0C315.9 283.8 314.2 274.3 311.0 261.0C307.9 247.7 300.6 223.9 298.1 216.0C295.6 208.1 299.6 207.4 296.0 213.6C292.4 219.8 282.1 243.3 276.2 253.0C270.4 262.7 263.3 271.6 261.0 271.9C258.7 272.3 262.2 259.7 262.2 255.0C262.1 250.3 261.8 248.8 260.8 244.0C259.8 239.2 258.8 233.5 256.2 226.0C253.6 218.5 249.5 208.4 245.0 199.1C240.5 189.9 234.5 179.4 229.0 170.5C223.5 161.6 218.4 153.6 212.0 145.7C205.6 137.8 195.8 127.3 190.5 123.0C185.2 118.7 183.6 119.0 180.0 119.7C176.4 120.3 174.5 120.8 169.0 127.0C163.5 133.2 154.6 143.8 146.9 157.0C139.3 170.2 127.2 197.1 123.0 206.1C118.8 215.1 121.9 209.3 122.0 211.0C122.1 212.7 120.9 209.8 123.9 216.0C126.8 222.2 137.1 242.4 139.6 248.0C142.2 253.6 140.4 249.7 139.0 249.8C137.6 249.9 134.8 250.2 131.0 248.6C127.2 247.1 120.3 243.5 116.0 240.8C111.7 238.0 109.9 236.8 105.3 232.0C100.8 227.2 94.4 220.7 88.6 212.0C82.9 203.3 76.3 192.8 70.7 180.0C65.2 167.2 57.7 143.2 55.3 135.0C52.9 126.8 53.6 134.8 56.2 131.0C58.7 127.2 59.0 126.0 70.5 112.0C82.0 98.0 110.5 63.2 125.3 47.0C140.0 30.8 150.2 22.3 159.0 15.1C167.8 7.8 173.8 5.5 178.0 3.5Z', wave: 'M108.0 260.7C116.2 260.4 120.7 261.8 127.0 263.4C133.3 265.0 139.7 267.2 146.0 270.5C152.3 273.8 159.8 279.1 165.0 283.3C170.2 287.5 173.1 290.6 177.0 295.7C180.9 300.8 185.7 307.9 188.6 314.0C191.6 320.1 193.4 326.5 194.6 332.0C195.9 337.5 196.3 341.3 196.2 347.0C196.1 352.7 195.0 360.8 193.9 366.0C192.8 371.2 191.8 373.7 189.7 378.0C187.6 382.3 184.4 387.8 181.2 392.0C178.0 396.2 173.9 400.1 170.6 403.0C167.2 405.9 164.3 407.5 161.0 409.2C157.7 411.0 155.2 412.4 151.0 413.5C146.8 414.5 140.3 415.5 136.0 415.6C131.7 415.8 129.2 415.5 125.0 414.3C120.8 413.2 115.8 411.6 111.0 408.9C106.2 406.1 99.7 401.5 96.4 398.0C93.0 394.5 88.5 388.9 90.9 388.0C93.3 387.1 104.7 392.7 111.0 392.8C117.3 393.0 124.6 390.6 128.9 389.0C133.3 387.4 134.6 385.7 137.2 383.0C139.8 380.3 142.7 376.2 144.3 373.0C146.0 369.8 146.6 367.3 147.0 364.0C147.5 360.7 148.0 357.5 147.1 353.0C146.1 348.5 144.3 341.7 141.3 337.0C138.3 332.3 133.4 327.8 129.0 324.9C124.6 321.9 120.2 320.0 115.0 319.4C109.8 318.7 102.2 320.0 98.0 321.0C93.8 322.0 93.0 322.8 90.0 325.1C87.0 327.5 83.7 329.6 80.0 335.3C76.3 340.9 70.4 352.2 67.9 359.0C65.5 365.8 65.5 371.0 65.2 376.0C64.8 381.0 64.8 383.2 65.8 389.0C66.8 394.8 67.8 403.2 71.0 411.0C74.2 418.8 79.0 428.1 84.9 436.0C90.7 443.9 99.1 452.4 106.0 458.1C112.9 463.8 118.3 466.6 126.0 470.1C133.7 473.6 142.5 477.3 152.0 479.2C161.5 481.1 173.7 481.7 183.0 481.4C192.3 481.0 199.5 480.0 208.0 477.2C216.5 474.5 226.5 469.4 234.0 464.9C241.5 460.3 251.3 449.7 253.0 449.9C254.7 450.1 247.8 461.0 244.1 466.0C240.5 471.0 237.0 475.0 231.1 480.0C225.3 485.0 215.0 492.0 209.0 495.8C203.0 499.5 201.5 500.2 195.0 502.5C188.5 504.8 179.5 507.9 170.0 509.4C160.5 511.0 148.0 512.0 138.0 511.7C128.0 511.4 119.2 510.0 110.0 507.8C100.8 505.6 90.3 501.5 83.0 498.5C75.7 495.4 72.5 493.9 66.0 489.5C59.5 485.1 50.8 478.9 43.9 472.0C37.0 465.1 30.0 456.5 24.5 448.0C19.1 439.5 14.5 430.3 11.1 421.0C7.8 411.7 5.5 401.8 4.3 392.0C3.0 382.2 3.1 370.5 3.6 362.0C4.1 353.5 5.0 348.8 7.4 341.0C9.9 333.2 13.2 323.5 18.1 315.0C23.0 306.5 30.8 296.4 36.8 290.0C42.8 283.6 47.1 280.6 54.0 276.5C60.9 272.4 69.0 267.9 78.0 265.3C87.0 262.7 99.8 261.1 108.0 260.7Z' };   // logo shapes, traced from Sneha's logo (v2: flame + swirl)
+  const LOGO = `<svg class="br-m" viewBox="0 0 378 519" aria-hidden="true"><path class="lg-flame" fill-rule="evenodd" d="${LG.flame}"/><path class="lg-wave" fill-rule="evenodd" d="${LG.wave}"/></svg>`;   // solid theme colours, no gradients
+  let icN = 0;
+  const icPart = (cls, d) => { const id = `icc${++icN}`; return `<clipPath id="${id}"><path clip-rule="evenodd" d="${d}"/></clipPath><path class="${cls}" fill-rule="evenodd" clip-path="url(#${id})" d="${d}"/>`; };   // clipped to its own shape, so the outline sits inside the edge
+  const ICON = {                                              // the two halves of the logo; square viewBoxes keep them the same size
+    fire: () => `<svg class="ico ico-fire" viewBox="0 0 32 32" aria-hidden="true"><path class="fl-outer" d="M16 3C17.6 8.2 24 10.8 24 18.2A8 8 0 0 1 8 18.2C8 14.8 9.6 12.4 11.4 10.8C11.6 13.8 13 15.6 14.8 15.8C14 11.2 14.4 7.2 16 3Z"/><path class="fl-inner" d="M16.6 15C17.4 17.6 20.4 18.8 20.4 22A4.4 4.4 0 0 1 11.6 22C11.6 20.3 12.4 19.1 13.3 18.3C13.4 19.7 14.1 20.6 15 20.7C14.6 18.5 15 16.8 16.6 15Z"/></svg>`,   // the original flame symbol, which fills in when Fire is on
+    flood: () => `<svg class="ico ico-flood" viewBox="-17.7 239.7 293 293" aria-hidden="true">${icPart('ic-wave', LG.wave)}</svg>`,
+  };
+  const sun = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  const moon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></svg>';
+  const expand = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>';
+  const back = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>';
+  const bars = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/></svg>';
+  const xmark = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+  // shown: the hazard the toggle draws first, so a switch can animate from the old side
+  const tog = (shown) => `<div class="hzt" role="radiogroup" aria-label="Hazard" data-hz="${shown}"><span class="hzt-ind" aria-hidden="true"></span>`
+    + ['fire', 'flood'].map((k) => `<button type="button" role="radio" data-set-hz="${k}" aria-checked="${k === shown}" tabindex="${k === shown ? 0 : -1}">${ICON[k]()}<span>${k === 'fire' ? 'Fire' : 'Flood'}</span></button>`).join('') + '</div>';
+  const thb = () => { const to = S.theme === 'dark' ? 'light' : 'dark'; return `<button type="button" class="thb" data-act="theme" aria-label="Switch to ${to} theme" title="Switch to ${to} theme">${S.theme === 'dark' ? sun : moon}</button>`; };
+  const brand = `<span class="br">${LOGO}SkyAlert</span>`;
+  const smp = () => (S.hz === 'fire' && S.mode === 'model' ? '<span class="smp">Past fire, 2020</span>' : DATA[S.hz].live ? '<span class="smp live">Live data</span>' : '<span class="smp">Sample data</span>');
+  const ticks = (l) => `<span class="tk" aria-hidden="true">${[1, 2, 3, 4].map((i) => `<i${i <= l ? ' class="on"' : ''}></i>`).join('')}</span>`;
+  const risk = (l, cls = '') => `<span class="rk ${cls}" data-l="${l}">${ticks(l)}<span${cls === 'bare' ? ' class="sr-only"' : ''}>${RISK[l]}</span></span>`;   // 'bare': bars only, word kept for screen readers
+  const kind = (D, it) => (D.live ? `<span class="kd">${it && it.picked ? 'Picked spot' : 'Live fire'}</span>` : '<span class="kd"><i aria-hidden="true"></i>Predicted</span>');
+  const legend = (D) => `<span class="lgd"><span><i></i>${D && D.live ? 'Past 24 h' : 'Observed'}</span><span class="lg-p"><i></i>${D && D.live ? 'Forecast' : 'Predicted'}</span></span>`;
+  function confRing(conf, s, sw) {
+    const r = s / 2 - sw, C = 2 * Math.PI * r;
+    return `<svg class="cfr" viewBox="0 0 ${s} ${s}" width="${s}" height="${s}" role="img" aria-label="Model confidence ${conf} percent"><circle class="cfr-bg" cx="${s / 2}" cy="${s / 2}" r="${r}" stroke-width="${sw}"/><circle class="cfr-fg" cx="${s / 2}" cy="${s / 2}" r="${r}" stroke-width="${sw}" stroke-dasharray="${f1(C * conf / 100)} ${f1(C)}" transform="rotate(-90 ${s / 2} ${s / 2})"/><text x="${s / 2}" y="${s / 2}" dy=".35em" text-anchor="middle" font-size="${f1(s * 0.24)}">${conf}%</text></svg>`;
+  }
+  const layers = (D) => `<fieldset class="lys"><legend class="sr-only">Map layers</legend>`
+    + (D.live ? ['observed', 'predicted'] : ['observed', 'predicted', 'context']).map((k) => {
+      const off = D.live && k === 'predicted' && !D.modelReady; // no model output yet, so its layer can't be turned on
+      return `<label class="ly"><input type="checkbox" data-layer="${k}"${S.layers[k] && !off ? ' checked' : ''}${off ? ' disabled' : ''}><span class="ly-g ly-${k}" aria-hidden="true"></span><span>${D.layers[k]}</span></label>`;
+    }).join('') + '</fieldset>';
+
+  const nowPct = (Sr) => f1((Sr.obs.length - 1) / (Sr.obs.length + Sr.pred.length - 1) * 100);
+  function chart(D, o) {
+    const Sr = D.series, L = S.layers, w = o.w, h = o.h, [pt, pr, pb, pl] = o.pad;
+    const nObs = Sr.obs.length, n = nObs + Sr.pred.length, now = nObs - 1;
+    const iw = w - pl - pr, ih = h - pt - pb, X = (i) => f1(pl + (iw * i) / (n - 1)), Y = (v) => f1(pt + ih * (1 - Math.min(v, Sr.max) / Sr.max));
+    const showObs = Sr.live || L.observed, showPred = Sr.live || L.predicted, showTh = Sr.live || L.context;   // live weather lines don't depend on the map layers
+    let g = '';
+    if (!n) return '';
+    if (o.bars && Sr.bars && L.observed) {
+      const bw = (iw / (n - 1)) * 0.56, bmax = Math.max(...Sr.bars);
+      Sr.bars.forEach((b, i) => { const bh = ih * 0.4 * b / bmax; g += `<rect class="c-bar" x="${f1(X(i) - bw / 2)}" y="${f1(pt + ih - bh)}" width="${f1(bw)}" height="${f1(bh)}"/>`; });
+    }
+    if (showTh) g += `<line class="c-th" x1="${pl}" x2="${w - pr}" y1="${Y(Sr.threshold)}" y2="${Y(Sr.threshold)}"/>`;
+    if (showPred && Sr.pred.length) {
+      if (Sr.spread) {
+        const up = Sr.pred.map((v, i) => `${X(nObs + i)} ${Y(Math.min(Sr.max, v + Sr.spread[i]))}`), dn = Sr.pred.map((v, i) => `${X(nObs + i)} ${Y(Math.max(0, v - Sr.spread[i]))}`).reverse();
+        g += `<path class="c-band" d="M${X(now)} ${Y(Sr.obs[now])} L${up.join(' L')} L${dn.join(' L')} Z"/>`;
+      }
+      g += `<path class="c-pred" d="M${X(now)} ${Y(Sr.obs[now])} L${Sr.pred.map((v, i) => `${X(nObs + i)} ${Y(v)}`).join(' L')}"/>`;
+    }
+    if (showObs && nObs) g += `<path class="c-obs" d="M${Sr.obs.map((v, i) => `${X(i)} ${Y(v)}`).join(' L')}"/>`;
+    g += `<line class="c-now" x1="${X(now)}" x2="${X(now)}" y1="${pt - 4}" y2="${pt + ih}"/>`;
+    if (o.xlabels) g += `<text class="c-ax" x="${X(0)}" y="${h - 5}">−24 h</text><text class="c-nowt" x="${X(now)}" y="${h - 5}" text-anchor="middle">Now</text><text class="c-ax" x="${X(n - 1)}" y="${h - 5}" text-anchor="end">+24 h</text>`;
+    return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${Sr.name}: the last 24 hours and the next 24 hours${Sr.live ? '' : ', sample data'}">${g}</svg>`;
+  }
+
+
+  // =====================================================================
+  // THE TWO LAYOUTS
+  // data-k marks a piece that exists in both and flies between them; .pc marks a piece that only fades.
+  // =====================================================================
+  const TILES = {
+    light: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', attr: 'Tiles &copy; Esri &mdash; Source: Esri, HERE, Garmin, USGS, NGA, EPA, USDA, NPS' },
+    dark: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', attr: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors' },
+  };
+  const attr = (cls) => `<p class="attr ${cls}" data-k="attr">${S.hz === 'fire' && S.mode === 'model' ? 'Model output: SkyAlert fire detector on Landsat-8, Aug 27, 2020' : DATA[S.hz].live ? 'Fires: NASA FIRMS, VIIRS NOAA-20 · Weather: Open-Meteo · Places: © OpenStreetMap' : 'Sample overlay, not real data'} · ${TILES[S.theme].attr}</p>`;
+
+  function ovHTML(shown) {
+    const D = DATA[S.hz], it = D.items[S.sel];
+    return `
+    <header class="ov-hd">
+      <div data-k="brand">${brand}</div><div data-k="tog">${tog(shown)}</div><span class="sp"></span><button type="button" class="dsb pc" data-act="data" aria-haspopup="dialog">${bars}<span>Model results</span></button><div data-k="smp">${smp()}</div><div data-k="thm">${thb()}</div>
+    </header>
+    <section class="ov-hero" aria-label="Selected cell">
+      <div class="ov-eye"><b data-k="selname">${it.name}</b><span class="pc">${kind(D, it)}</span><span class="pc">${D.window}</span></div>
+      <div class="num ov-num"><span class="fn">${it.prob}</span><span class="pct">${D.unit || '%'}</span></div>
+      <p class="ov-cap" data-k="plabel">${D.probLabel}</p>
+      <div class="ov-row"><div data-k="risk">${risk(it.risk, 'xl')}</div><p class="ov-conf" data-k="conf">${D.live ? D.model : `Model confidence ${it.conf}%<br>${D.model}`}</p></div>
+      <button type="button" class="cta" data-k="cta" data-act="focus">Focus on the map ${expand}</button>${S.hz === 'fire' ? '<button type="button" class="cta ghost pc" data-act="model">See the model on a past fire</button>' : '<span class="cta ghost cta-ph" aria-hidden="true">See the model on a past fire</span>'}
+    </section>
+    <section class="ov-right" aria-label="Cells">
+      <div class="ov-slot pc"><button type="button" class="ov-go" data-act="focus" aria-label="Focus on the map" title="Focus on the map">${expand}</button></div>
+      ${attr('ov-attr')}
+      <ul class="ov-cells">${D.items.slice(0, 4).map((x, i) => `<li><button type="button" class="ov-cell" data-k="cell-${i}" data-sel="${i}" aria-pressed="${i === S.sel}"><b>${i + 1}</b>${x.name} · ${RISK[x.risk]}</button></li>`).join('')}</ul>
+      <div class="ov-layers" data-k="layers">${layers(D)}</div>
+    </section>
+    <section class="ov-foot" aria-label="Conditions">
+      <div class="ov-meas">${D.meas.map((m, i) => `<div class="mrow" data-k="m-${i}"><span class="ml">${m.l}<small>${m.s}</small></span><span class="mv">${m.v}<u>${m.u}</u></span></div>`).join('')}</div>
+      <div class="ov-sh pc"><span>${D.series.name}</span>${legend(D)}</div>
+      <div class="ov-spark" data-k="chart">${chart(D, { w: 1150, h: 50, pad: [6, 4, 4, 4] })}</div>
+      <div class="ov-spark-l pc" aria-hidden="true"><span>−24 h</span><span style="left:${nowPct(D.series)}%">Now</span><span>+24 h</span></div>
+    </section>`;
+  }
+
+  const modeSw = () => (S.hz === 'fire' ? `<div class="msw pc" role="group" aria-label="What the map shows">${[['live', 'Today, live'], ['model', 'Model on a past fire']].map(([k, l]) => `<button type="button" data-mode="${k}" aria-pressed="${S.mode === k}">${l}</button>`).join('')}</div>` : '');
+
+  function modelMvHTML(shown) {
+    const R = MODEL.detector.rows, t = R[S.mSel], sum = (k) => R.reduce((a, r) => a + r[k], 0);
+    const L = sum('label'), M = sum('model'), F = sum('found');
+    const ml = S.mLayers, lyr = (k, label) => `<label class="ly"><input type="checkbox" data-mlayer="${k}"${ml[k] ? ' checked' : ''}><span class="ly-g ly-${k}" aria-hidden="true"></span><span>${label}</span></label>`;
+    return `
+    <section class="fp fp1" data-anchor=".num" aria-label="Summary">
+      <div class="pbg" aria-hidden="true"></div>
+      <div class="fp1-top"><div data-k="brand">${brand}</div><span class="sp"></span><div data-k="smp">${smp()}</div><button type="button" class="thb dsi pc" data-act="data" aria-haspopup="dialog" aria-label="Model results" title="Model results">${bars}</button><div data-k="thm">${thb()}</div></div>
+      <div class="fp1-r2"><div data-k="tog">${tog(shown)}</div><button type="button" class="cta back" data-k="cta" data-act="back">${back}Overview</button></div>
+      ${modeSw()}
+      <h2 class="pc">Our fire detector on a wildfire in Sequoia National Forest, Aug 27, 2020</h2>
+      <hr class="pc">
+      <div class="m-stats">
+        <div class="pr"><div class="num mv-num"><span class="fn">${Math.round(F / L * 100)}</span><span class="pct">%</span></div><span class="pr-l" data-k="plabel">of real fire found</span></div>
+        <div class="pr pc"><div class="mv-num2">${Math.round(F / M * 100)}%</div><span class="pr-l">of its alerts were real fire</span></div>
+        <div class="pr pc"><div class="mv-num2">93% · 82%</div><span class="pr-l">overall, on 3,113 unseen tiles</span></div>
+      </div>
+      <hr class="pc">
+      <fieldset class="lys pc"><legend class="sr-only">Map layers</legend>${lyr('sat', 'Satellite image')}${lyr('model', 'Model: fire found')}${lyr('label', 'Correct answer')}</fieldset>
+    </section>
+    <section class="fp fp2" data-anchor=".selp-name" aria-label="Selected tile">
+      <div class="pbg" aria-hidden="true"></div>
+      <div class="selp-top pc"><span class="kd">Fire detector · tile ${S.mSel + 1}</span><span class="selp-id">${t.patch}</span></div>
+      <h3 class="selp-name" data-k="selname">Caught ${t.found} of ${t.label} fire pixels</h3>
+      <div class="m-meter pc" role="img" aria-label="${pc0(t.found, t.label)} of real fire found"><i style="width:${t.found / t.label * 100}%"></i></div>
+      ${exImgs('det', S.mSel, ['Satellite view', 'Model', 'Correct answer']).replace('class="ex-imgs"', 'class="ex-imgs pc"')}
+      <dl class="selp-dl pc"><div><dt>Real fire found</dt><dd>${pc0(t.found, t.label)}</dd></div><div><dt>Alerts that were real</dt><dd>${pc0(t.found, t.model)}</dd></div><div><dt>False alarms</dt><dd>${t.model - t.found} px</dd></div><div><dt>Missed</dt><dd>${t.label - t.found} px</dd></div></dl>
+      <hr class="pc">
+      <h4 class="fp-h pc">All 4 tiles, 7.7 × 7.7 km each</h4>
+      <ul class="its">${R.map((x, i) => `<li><button type="button" class="it${i === S.mSel ? ' on' : ''}" data-k="cell-${i}" data-msel="${i}" aria-pressed="${i === S.mSel}"><span class="it-n">${i + 1}</span><span class="it-name">Tile ${x.patch}<small>${x.center[0].toFixed(3)}, ${x.center[1].toFixed(3)}</small></span><span></span><span class="it-p">${pc0(x.found, x.label)}<small>found</small></span></button></li>`).join('')}</ul>
+    </section>
+    <section class="fp fp3 m-fp3" data-anchor=".mss" aria-label="Spread predictor">
+      <div class="pbg" aria-hidden="true"></div>
+      <div class="mss m-sp">
+        <div class="m-sp-h"><b>Spread predictor: tomorrow's fire, on past fires</b><span>Catches 52% of next-day fire, vs 27% for “tomorrow = today”. Not on the map: its test data has no locations.</span></div>
+        <div class="m-sp-row">${MODEL.spread.rows.map((r, i) => `<figure class="m-ex"><div class="m-ex-imgs"><img src="model_results/spr_${i + 1}_2.png" alt="Forecast for day 2" loading="lazy" width="150" height="150"><img src="model_results/spr_${i + 1}_3.png" alt="What burned on day 2" loading="lazy" width="150" height="150"></div><p><b>${r.kind.replace(' forecast', '')}: caught ${r.caught} of ${r.burned} km²</b><small>Forecast · what burned</small></p></figure>`).join('')}</div>
+      </div>
+    </section>
+    <div class="zm pc"><button type="button" data-act="zin" aria-label="Zoom in">+</button><button type="button" data-act="zout" aria-label="Zoom out">−</button></div>
+    ${attr('mv-attr')}`;
+  }
+
+  function mvHTML(shown) {
+    if (S.hz === 'fire' && S.mode === 'model') return modelMvHTML(shown);
+    const D = DATA[S.hz], it = D.items[S.sel];
+    return `
+    <section class="fp fp1" data-anchor=".num" aria-label="Summary">
+      <div class="pbg" aria-hidden="true"></div>
+      <div class="fp1-top"><div data-k="brand">${brand}</div><span class="sp"></span><div data-k="smp">${smp()}</div><button type="button" class="thb dsi pc" data-act="data" aria-haspopup="dialog" aria-label="Model results" title="Model results">${bars}</button><div data-k="thm">${thb()}</div></div>
+      <div class="fp1-r2"><div data-k="tog">${tog(shown)}</div><button type="button" class="cta back" data-k="cta" data-act="back">${back}Overview</button></div>
+      ${modeSw()}
+      <h2 class="pc">${D.headline}</h2>
+      <hr class="pc">
+      <div class="fp1-row">
+        <div data-k="risk">${risk(D.risk, 'lg')}</div>
+        <div class="pr"><div class="num mv-num"><span class="fn">${D.prob}</span><span class="pct">${D.unit || '%'}</span></div><span class="pr-l" data-k="plabel">${D.regionLabel}</span></div>
+        <div class="cf" data-k="conf">${D.live ? `<span class="cf-n">${nf(D.count)}</span><span class="cf-l">fire detections</span>` : `${confRing(D.conf, 52, 5)}<span>model<br>confidence</span>`}</div>
+      </div>
+      <hr class="pc">
+      <div data-k="layers">${layers(D)}</div>
+    </section>
+    <section class="fp fp2" data-anchor=".selp-name" aria-label="Selected cell">
+      <div class="pbg" aria-hidden="true"></div>
+      <div class="selp-top pc">${kind(D, it)}<span class="selp-id">${it.id}</span></div>
+      <h3 class="selp-name" data-k="selname">${it.name}</h3>
+      <div class="pc">${risk(it.risk)}</div>
+      <dl class="selp-dl pc">${D.live
+        ? `<div><dt>Fire-weather index</dt><dd><span class="fwi-n">${it.fwi}</span> / 100</dd></div><div><dt>Model: fire tomorrow</dt><dd>${it.fc && it.fc.status === 'ok' ? `${it.prob}% within 2 km` : MODEL_STATUS.ready ? 'Inputs unavailable' : 'Waiting for weights'}</dd></div><div><dt>${D.metricName}</dt><dd>${it.metric}</dd></div><div><dt>Evidence</dt><dd>${it.evidence}</dd></div>`
+        : `<div><dt>Probability</dt><dd>${it.prob}%</dd></div><div><dt>Confidence</dt><dd>${it.conf}%</dd></div><div><dt>${D.metricName}</dt><dd>${it.metric}</dd></div><div><dt>Evidence</dt><dd>${it.evidence}</dd></div>`}</dl>
+      <p class="selp-win pc">${it.window}</p>${D.live && it.reasons && it.reasons.length ? `<ul class="rs pc" aria-label="Why this risk level">${it.reasons.map((r) => `<li class="rs-${r.effect}">${r.text}</li>`).join('')}</ul>` : ''}
+      <hr class="pc">
+      <h4 class="fp-h pc">${D.listTitle || `All cells, ${D.window.toLowerCase()}`}</h4>
+      <ul class="its">${D.items.map((x, i) => `<li><button type="button" class="it${i === S.sel ? ' on' : ''}" data-k="cell-${i}" data-sel="${i}" aria-pressed="${i === S.sel}"><span class="it-n">${i + 1}</span><span class="it-name">${x.name}<small>${x.id}</small></span>${risk(x.risk, 'bare')}<span class="it-p">${x.prob}${D.live && !D.modelReady ? '' : '%'}</span></button></li>`).join('')}</ul>
+    </section>
+    <section class="fp fp3" data-anchor=".mss" aria-label="Conditions">
+      <div class="pbg" aria-hidden="true"></div>
+      <div class="mss">${D.meas.map((m, i) => `<div class="ms" data-k="m-${i}"><span class="ms-l">${m.l}</span><span class="ms-v">${m.v}<span class="ms-u">${m.u}</span></span></div>`).join('')}</div>
+      <div class="fp3-c"><div class="fp3-h pc"><span>${D.series.name}</span>${legend(D)}</div><div data-k="chart">${chart(D, { w: 460, h: 120, pad: [10, 6, 22, 6], bars: true, xlabels: true })}</div></div>
+    </section>
+    <div class="zm pc"><button type="button" data-act="zin" aria-label="Zoom in">+</button><button type="button" data-act="zout" aria-label="Zoom out">−</button></div>
+    ${attr('mv-attr')}`;
+  }
+
+  // Keep focus on the same control when the layouts are rebuilt
+  function focusKey() {
+    const el = document.activeElement;
+    if (!el || !APP.contains(el)) return null;
+    for (const a of ['act', 'setHz', 'sel', 'layer', 'mode', 'msel', 'mlayer']) if (el.dataset[a] != null) return `[data-${a.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())}="${el.dataset[a]}"]`;
+    return null;
+  }
+  function render(shown = S.hz) {
+    const fk = focusKey();
+    OV.innerHTML = ovHTML(shown);
+    MV.innerHTML = mvHTML(shown);
+    if (fk) $(fk, active())?.focus({ preventScroll: true });
+  }
+
+  // =====================================================================
+  // MAP — one Leaflet map under both layouts. The overview clips it to its slot,
+  // so going to the map view only widens the clip; the map is never resized.
+  // =====================================================================
+  const REG = { fire: { w: -120.95, n: 38.92, lon: 0.5, lat: 0.253 }, flood: { w: -121.95, n: 38.42, lon: 0.5, lat: 0.253 } };   // 400×260 sketch units → lat/lon box
+  const ll = ([x, y]) => { const r = REG[S.hz]; return [r.n - (y / 260) * r.lat, r.w + (x / 400) * r.lon]; };
+  const modelBounds = () => MODEL.detector.rows.reduce((b, r) => b.extend(r.bounds), L.latLngBounds(MODEL.detector.rows[0].bounds));
+  const TOP_N = 5;   // map view zooms to the 5 highest-index fires; the list still shows all of them
+  const topFive = () => L.latLngBounds(DATA[S.hz].items.slice(0, TOP_N).map((x) => x.latlng)).pad(0.15);
+  const selPt = () => { const it = DATA[S.hz].items[S.sel]; return it.latlng || ll(it.pos); };
+  const bounds = () => { if (S.hz === 'fire' && S.mode === 'model') return modelBounds(); if (S.view === 'mv' && S.focus) return L.latLng(selPt()).toBounds(30000); /* a fire picked from the list: ~30 km around it */ if (DATA[S.hz].live) return S.view === 'mv' && DATA[S.hz].items?.length ? topFive() : S.liveBounds; const r = REG[S.hz]; return L.latLngBounds([r.n - r.lat, r.w], [r.n, r.w + r.lon]); };
+  let MAP = null, TL = null, DATA_LAYER = null, MARKERS = null;
+
+  function rasterSVG(D) {
+    let g = '';
+    if (S.layers.predicted) for (let y = 0; y < 260; y += 13) for (let x = 0; x < 400; x += 13) {
+      const v = D.field(x + 6.5, y + 6.5), lv = v > 0.8 ? 4 : v > 0.56 ? 3 : v > 0.34 ? 2 : v > 0.17 ? 1 : 0;
+      if (lv) g += `<rect class="m-cell l${lv}" x="${x}" y="${y}" width="12.4" height="12.4"/>`;
+    }
+    if (S.layers.context && D.key === 'fire') for (let y = 26; y < 260; y += 62) for (let x = 30; x < 400; x += 74) g += `<path class="m-wind" d="M${x - 7} ${y - 5}L${x + 7} ${y + 5}M${x + 7} ${y + 5}l-5.5 0.4M${x + 7} ${y + 5}l-2.2 -5" stroke-width="1.2"/>`;
+    return g;
+  }
+  function initMap() {
+    if (!window.L) { drawData(); return; }
+    MAP = L.map(MAPEL, { zoomControl: false, attributionControl: false, scrollWheelZoom: false, zoomSnap: 0.25, zoomDelta: 0.5, preferCanvas: true });   // attribution is our own .attr line; canvas keeps thousands of fire dots fast
+    MAP.on('click', (e) => {                                  // a fire dot, or any other spot: its place, weather and index
+      if (!DATA.fire.live || S.hz !== 'fire' || S.mode !== 'live' || busy) return;
+      const at = MAP.latLngToContainerPoint(e.latlng);
+      let near = null, best = 10;                             // a dot counts as clicked within 10 px
+      for (const f of FIRES) { const d = at.distanceTo(MAP.latLngToContainerPoint([f.latitude, f.longitude])); if (d < best) { best = d; near = f; } }
+      pick = near ? clusterAround(near) : { latlng: [e.latlng.lat, e.latlng.lng] };
+      refreshLive(0);
+    });
+    setTiles();
+    drawData();
+  }
+  function setTiles() {
+    if (!MAP) return;
+    if (TL) MAP.removeLayer(TL);
+    TL = L.tileLayer(TILES[S.theme].url, { maxZoom: 16 }).addTo(MAP);
+  }
+  function drawData() {
+    const D = DATA[S.hz];
+    if (!MAP) {                                               // offline sketch
+      MAPEL.innerHTML = `<svg class="fallback" viewBox="0 0 400 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path class="m-river" d="M${RIVER.map((p) => p.join(' ')).join(' L')}"/>${rasterSVG(D)}</svg>`;
+      return;
+    }
+    if (DATA_LAYER) DATA_LAYER.remove();
+    DATA_LAYER = L.layerGroup().addTo(MAP);
+    if (S.hz === 'fire' && S.mode === 'model') {              // the detector's output, drawn where the tiles really are
+      if (MARKERS) MARKERS.remove();
+      MARKERS = L.layerGroup().addTo(MAP);
+      MODEL.detector.rows.forEach((r, i) => {
+        const n = i + 1, on = i === S.mSel;
+        if (S.mLayers.sat) L.imageOverlay(`model_results/det_${n}_base256.png`, r.bounds, { className: 'm-px' }).addTo(DATA_LAYER);
+        if (S.mLayers.label) L.imageOverlay(`model_results/det_${n}_label_mask.png`, r.bounds, { className: 'm-px' }).addTo(DATA_LAYER);
+        if (S.mLayers.model) L.imageOverlay(`model_results/det_${n}_model_mask.png`, r.bounds, { className: 'm-px', opacity: S.mLayers.label ? 0.85 : 1 }).addTo(DATA_LAYER);
+        L.rectangle(r.bounds, { color: on ? '#25272C' : '#FFFFFF', weight: on ? 3 : 1.5, fill: true, fillOpacity: 0, dashArray: on ? null : '4 4' })
+          .on('click', () => selectTile(i)).addTo(MARKERS);
+        L.marker([r.bounds[1][0], r.bounds[0][1]], { icon: L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [-4, -4], html: `<span class="m-tile-k${on ? ' on' : ''}">${n}</span>` }), title: `Tile ${n}: caught ${r.found} of ${r.label} fire pixels` })
+          .on('click', () => selectTile(i)).addTo(MARKERS);
+      });
+      return;
+    }
+    if (D.live) {                                             // real detections; no model raster until one is connected
+      if (S.layers.predicted && D.modelReady) D.items.forEach((it) => {   // the model's forecast around each fire
+        if (!it.fc || it.fc.status !== 'ok') return;
+        const b = it.fc.bounds;
+        L.imageOverlay(heatURL(it.fc), [[b.south, b.west], [b.north, b.east]], { opacity: 0.9, interactive: false }).addTo(DATA_LAYER);
+      });
+      if (S.layers.observed) FIRES.forEach((f) => L.circleMarker([f.latitude, f.longitude], { radius: 3.5, color: '#FFFFFF', weight: 0.8, fillColor: '#E8452C', fillOpacity: 0.9, interactive: false }).addTo(DATA_LAYER));
+      drawMarkers();
+      return;
+    }
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 400 260');
+    svg.innerHTML = rasterSVG(D);
+    L.svgOverlay(svg, bounds(), { interactive: false }).addTo(DATA_LAYER);
+    if (S.layers.observed) D.points.forEach((p) => {
+      if (D.key === 'fire') L.circleMarker(ll(p), { radius: 4, className: 'lm-pt', interactive: false }).addTo(DATA_LAYER);
+      else L.marker(ll(p), { icon: L.divIcon({ className: 'lm-gauge', iconSize: [11, 11] }), interactive: false, keyboard: false }).addTo(DATA_LAYER);
+    });
+    drawMarkers();
+  }
+  function drawMarkers() {
+    if (!MAP) return;
+    if (MARKERS) MARKERS.remove();
+    MARKERS = L.layerGroup().addTo(MAP);
+    DATA[S.hz].items.forEach((it, i) => {
+      const on = i === S.sel;
+      L.marker(it.latlng || ll(it.pos), {
+        icon: L.divIcon({ className: 'lm-mk' + (on ? ' on' : '') + (on && S.focus ? ' lm-focus' : '') + (it.picked ? ' lm-pick' : ''), iconSize: [24, 24], iconAnchor: [12, 12], html: `<span class="lm-k">${i + 1}</span><span class="lm-lab">${it.name}</span>` }),
+        title: `${it.name}, ${RISK[it.risk]} ${DATA[S.hz].live ? 'fire-weather' : 'predicted'} risk`, zIndexOffset: on ? 500 : 0,
+      }).on('click', () => select(i)).addTo(MARKERS);
+    });
+  }
+
+  const rel = (el) => { const a = APP.getBoundingClientRect(), r = el.getBoundingClientRect(); return { x: r.left - a.left, y: r.top - a.top, w: r.width, h: r.height }; };
+  const clipOf = (r) => `inset(${r.y}px ${APP.clientWidth - r.x - r.w}px ${APP.clientHeight - r.y - r.h}px ${r.x}px round 14px)`;
+  const FULL = 'inset(0px 0px 0px 0px round 0px)';
+
+  // Fit the region into the part of the map that the current layout leaves visible
+  function pads() {
+    const W = APP.clientWidth, H = APP.clientHeight;
+    let tl, br;
+    if (S.view === 'ov') {
+      const r = rel($('.ov-slot', OV));
+      tl = [r.x + 12, r.y + 12]; br = [W - r.x - r.w + 12, H - r.y - r.h + 12];
+    } else {
+      const a = rel($('.fp1', MV)), b = rel($('.fp2', MV)), c = rel($('.fp3', MV));
+      if (c.w > 0) {                                          // desktop: between the three panels
+        const left = a.x + a.w + 20, right = W - b.x + 20;
+        tl = [W - left - right > 260 ? left : 24, 24]; br = [right, H - c.y + 20];
+      } else {                                                // phone: between the top and bottom panels
+        tl = [12, a.y + a.h + 10]; br = [12, H - b.y + 10];
+      }
+    }
+    return { tl, br };
+  }
+  let flyT = 0;
+  function fitView(animate) {
+    if (!MAP) return;
+    const { tl, br } = pads();
+    MAP.invalidateSize(false);
+    const o = { paddingTopLeft: tl, paddingBottomRight: br, ...(S.view === 'mv' && !(S.hz === 'fire' && S.mode === 'model') && (DATA[S.hz].live || S.focus) ? { maxZoom: 9 } : {}) };   // cap zoom so close-together fires don't zoom to street level
+    if (animate && !REDUCE.matches) {
+      MAPEL.classList.add('is-flying');
+      const land = () => { clearTimeout(flyT); MAPEL.classList.remove('is-flying'); };
+      clearTimeout(flyT); flyT = setTimeout(land, 1500);            // safety net if moveend never comes
+      MAP.once('moveend', land);
+      MAP.flyToBounds(bounds(), { ...o, duration: 0.85, easeLinearity: 0.4 });
+    }
+    else MAP.fitBounds(bounds(), { ...o, animate: false });
+  }
+  function layoutMap() {
+    MAPEL.style.clipPath = S.view === 'ov' ? clipOf(rel($('.ov-slot', OV))) : 'none';
+    fitView(false);
+  }
+
+  // =====================================================================
+  // THE TRANSITION
+  // =====================================================================
+  const easeIO = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const visible = (r) => r && r.w > 0 && r.h > 0;
+  // Leaf pieces only: a piece inside another piece moves with its parent
+  const pieces = (layer) => $$('[data-k], .pc', layer).filter((el) => !el.parentElement.closest('[data-k], .pc'));
+  function numStyle(el) {
+    const cs = getComputedStyle(el), p = getComputedStyle($('.pct', el));
+    return { r: rel(el), v: +$('.fn', el).textContent, fs: cs.fontSize, fw: cs.fontWeight, ls: cs.letterSpacing, c: cs.color, pfs: p.fontSize, pml: p.marginLeft, pc: p.color };
+  }
+  const COORD = /^\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\s*$/;
+  function rollCoords(el, from, to, dur) {                     // "lat, lon" rolls from the last fire's spot to the new one
+    const a = COORD.exec(from), b = COORD.exec(to);
+    if (!el || !a || !b || REDUCE.matches) return;
+    const dec = (b[1].split('.')[1] || '').length, t0 = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - t0) / dur), e = easeIO(t);
+      el.textContent = t < 1 ? `${(+a[1] + (b[1] - a[1]) * e).toFixed(dec)}, ${(+a[2] + (b[2] - a[2]) * e).toFixed(dec)}` : to;
+      if (t < 1) requestAnimationFrame(step);
+    };
+    el.textContent = from;                                     // no flash of the new value before the roll starts
+    requestAnimationFrame(step);
+  }
+  function countUp(el, from, to, dur, delay) {                // the number changes value while it travels
+    const t0 = performance.now() + delay;
+    const step = (now) => {
+      const t = Math.min(1, Math.max(0, (now - t0) / dur));
+      el.textContent = Math.round(from + (to - from) * easeIO(t));
+      if (t < 1) requestAnimationFrame(step);
+    };
+    el.textContent = from;
+    requestAnimationFrame(step);
+  }
+
+  async function go(view) {
+    if (busy || view === S.view) return;
+    if (view === 'ov' && S.mode === 'model') { S.mode = 'live'; render(); drawData(); }   // the overview always describes today's live map
+    busy = true;
+    const toMap = view === 'mv', from = active(), to = toMap ? MV : OV;
+    const k = REDUCE.matches ? 0.001 : 1, A = [];
+    const anim = (el, kf, o) => { const a = el.animate(kf, { duration: o.d * k, delay: (o.delay || 0) * k, easing: o.e || 'cubic-bezier(.65, 0, .35, 1)', fill: 'both' }); A.push(a); return a; };
+    from.inert = true;
+
+    // 1. measure the layout we are leaving
+    const oldP = pieces(from), oldR = new Map(oldP.map((el) => [el, rel(el)]));
+    const oldNumEl = $('.num', from), oN = numStyle(oldNumEl);
+    const slotR = toMap ? rel($('.ov-slot', OV)) : null;
+
+    // 2. show the new layout underneath the old one and measure it
+    to.hidden = false;
+    S.view = view; APP.dataset.view = view; S.focus = false;   // opening the map view shows the top 5 again
+    const newP = pieces(to), newR = new Map(newP.map((el) => [el, rel(el)]));
+    const newNumEl = $('.num', to), nN = numStyle(newNumEl);
+    const oldByK = new Map(oldP.filter((el) => el.dataset.k && visible(oldR.get(el))).map((el) => [el.dataset.k, el]));
+    // everything else is measured now too, before any animation moves an element
+    const panels = $$('.fp', MV).map((fp) => ({ bg: $('.pbg', fp), f: rel(fp), a: rel($(fp.dataset.anchor, fp)) }));
+    const slotTo = toMap ? null : rel($('.ov-slot', OV));
+    MAP?.scrollWheelZoom[toMap ? 'enable' : 'disable']();
+    fitView(true);
+
+    const MOVE = 740, lead = toMap ? 0 : 150;                 // going back, the panels fold up first
+    const sharedOld = new Set(), sharedNew = new Set();
+
+    // 3. pieces in both layouts fly from the old spot to the new one, cross-fading on the way
+    for (const el of newP) {
+      const o = el.dataset.k && oldByK.get(el.dataset.k), n = newR.get(el);
+      if (!o || !visible(n)) continue;
+      const r = oldR.get(o), s = r.h / n.h;
+      sharedOld.add(o); sharedNew.add(el);
+      anim(el, [{ transform: `translate(${r.x - n.x}px, ${r.y - n.y}px) scale(${s})`, opacity: 0 }, { opacity: 0, offset: 0.3 }, { opacity: 1, offset: 0.62 }, { transform: 'none', opacity: 1 }], { d: MOVE, delay: lead });
+      anim(o, [{ transform: 'none', opacity: 1 }, { opacity: 1, offset: 0.12 }, { opacity: 0, offset: 0.42 }, { transform: `translate(${n.x - r.x}px, ${n.y - r.y}px) scale(${1 / s})`, opacity: 0 }], { d: MOVE, delay: lead });
+    }
+
+    // 4. pieces only in the old layout fade out; pieces only in the new one fade in after the move
+    oldP.filter((el) => !sharedOld.has(el)).forEach((el) => anim(el, [{ opacity: 1 }, { opacity: 0 }], { d: 200, e: 'ease' }));
+    newP.filter((el) => !sharedNew.has(el) && visible(newR.get(el)))
+      .sort((a, b) => newR.get(a).y - newR.get(b).y)
+      .forEach((el, i) => anim(el, [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { d: 360, delay: (toMap ? 640 : 560) + Math.min(i * 22, 260), e: 'cubic-bezier(.2, .7, .2, 1)' }));
+
+    // 5. the big number shrinks (or grows) into place and counts to its new value
+    oldNumEl.style.visibility = newNumEl.style.visibility = 'hidden';
+    const fn = $('.fn', FLY), fp = $('.pct', FLY);
+    fp.textContent = DATA[S.hz].unit || '%';
+    FLY.hidden = false;
+    anim(FLY, [
+      { transform: `translate(${oN.r.x}px, ${oN.r.y}px)`, fontSize: oN.fs, fontWeight: oN.fw, letterSpacing: oN.ls, color: oN.c },
+      { transform: `translate(${nN.r.x}px, ${nN.r.y}px)`, fontSize: nN.fs, fontWeight: nN.fw, letterSpacing: nN.ls, color: nN.c },
+    ], { d: MOVE + 60, delay: lead });
+    anim(fp, [{ fontSize: oN.pfs, marginLeft: oN.pml, color: oN.pc }, { fontSize: nN.pfs, marginLeft: nN.pml, color: nN.pc }], { d: MOVE + 60, delay: lead });
+    countUp(fn, oN.v, nN.v, (MOVE + 60) * k, lead * k);
+
+    // 6. each panel's box grows out from the data that just landed in it (and folds back into it on the way out)
+    panels.forEach(({ bg, f, a }, i) => {
+      const p = 10;
+      if (!visible(f) || !visible(a)) return;
+      const small = { top: `${a.y - f.y - p}px`, left: `${a.x - f.x - p}px`, right: `${f.x + f.w - a.x - a.w - p}px`, bottom: `${f.y + f.h - a.y - a.h - p}px`, borderRadius: '10px' };
+      const full = { top: '0px', left: '0px', right: '0px', bottom: '0px', borderRadius: '16px' };
+      if (toMap) anim(bg, [{ ...small, opacity: 0 }, { ...small, opacity: 1, offset: 0.2 }, { ...full, opacity: 1 }], { d: 580, delay: 340 + i * 60 });
+      else anim(bg, [{ ...full, opacity: 1 }, { ...small, opacity: 1, offset: 0.7 }, { ...small, opacity: 0 }], { d: 380 });
+    });
+
+    // 7. the map opens out of its slot (or closes back into it) and re-centres
+    anim(MAPEL, toMap ? [{ clipPath: clipOf(slotR) }, { clipPath: FULL }] : [{ clipPath: FULL }, { clipPath: clipOf(slotTo) }], { d: MOVE + 80, delay: lead });
+
+    await Promise.all(A.map((a) => a.finished)).catch(() => {});
+    from.hidden = true;
+    to.inert = false;
+    MAPEL.style.clipPath = toMap ? 'none' : clipOf(slotTo);
+    oldNumEl.style.visibility = newNumEl.style.visibility = '';
+    FLY.hidden = true;
+    A.forEach((a) => a.cancel());
+    busy = false;
+    $('[data-k="cta"]', to).focus({ preventScroll: true });
+    const D = DATA[S.hz];
+    LIVE.textContent = toMap ? `Map view. ${D.region}: ${D.prob} percent ${D.regionLabel}, ${RISK[D.risk]} risk.` : `Overview. ${D.items[S.sel].name}: ${D.items[S.sel].prob} percent.`;
+  }
+
+  // =====================================================================
+  // TRAINING DATA — copied from skyalert/output.txt (notebooks/inspect_landsat.py).
+  // Swap this object for a fetch of a JSON file once the training script writes one.
+  // =====================================================================
+  const STATS = {
+    fire: {
+      dataset: 'Landsat-8 Active Fire', source: 'skyalert/output.txt', script: 'notebooks/inspect_landsat.py',
+      sampleSize: 100, imageShape: [256, 256, 10], imageDtype: 'uint16', maskShape: [256, 256], maskDtype: 'uint8',
+      masks: [{ k: 'schroeder', name: 'Schroeder', s: 's1' }, { k: 'murphy', name: 'Murphy', s: 's2' }, { k: 'kumarRoy', name: 'Kumar-Roy', s: 's3' }],
+      bands: [
+        { ch: 0, band: 1, name: 'Coastal aerosol', min: 9045, max: 23070, mean: 10387.6 },
+        { ch: 1, band: 2, name: 'Blue', min: 8192, max: 23316, mean: 9552.4 },
+        { ch: 2, band: 3, name: 'Green', min: 7217, max: 23123, mean: 8647.9 },
+        { ch: 3, band: 4, name: 'Red', min: 6259, max: 24575, mean: 8073.4 },
+        { ch: 4, band: 5, name: 'Near-infrared', min: 5376, max: 28056, mean: 12272.1 },
+        { ch: 5, band: 6, name: 'Shortwave infrared 1', min: 5114, max: 65535, mean: 10797.5 },
+        { ch: 6, band: 7, name: 'Shortwave infrared 2', min: 5143, max: 65535, mean: 8397.9 },
+        { ch: 7, band: 9, name: 'Cirrus', min: 4969, max: 6410, mean: 5054.5 },
+        { ch: 8, band: 10, name: 'Thermal infrared 1', min: 18344, max: 61111, mean: 27938.6 },
+        { ch: 9, band: 11, name: 'Thermal infrared 2', min: 16961, max: 45506, mean: 25430.7 },
+      ],
+      patches: [
+        { id: 'LC08_L1TP_001067_20200812_20200812_01_RT_p00441', schroeder: 118, murphy: 142, kumarRoy: 137 },
+        { id: 'LC08_L1TP_124017_20200826_20200826_01_RT_p00686', schroeder: 115, murphy: 157, kumarRoy: 156 },
+        { id: 'LC08_L1TP_173068_20200817_20200817_01_RT_p00672', schroeder: 41, murphy: 52, kumarRoy: 53 },
+        { id: 'LC08_L1TP_103068_20200823_20200823_01_RT_p00610', schroeder: 37, murphy: 52, kumarRoy: 55 },
+        { id: 'LC08_L1TP_170069_20200812_20200812_01_RT_p00330', schroeder: 34, murphy: 44, kumarRoy: 47 },
+      ],
+    },
+    flood: null,                                              // no flood dataset output yet
+  };
+  const UINT16 = 65535;
+  const nf = (v) => v.toLocaleString('en-US');
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function scene(id) {                                        // LC08_L1TP_PPPRRR_YYYYMMDD_..._pNNNNN
+    const p = id.split('_'), d = p[3];
+    return { patch: p[p.length - 1], path: p[2].slice(0, 3), row: p[2].slice(3), date: `${MONTHS[+d.slice(4, 6) - 1]} ${+d.slice(6)}, ${d.slice(0, 4)}` };
+  }
+  const DS = $('#ds'), TIP = $('#tip');
+  const tableView = { fire: false, bands: false };
+
+  function trainingHTML() {
+    const T = STATS[S.hz];
+    const head = (eye, title, sub) => `<header class="ds-hd"><div><p class="ds-eye">${eye}</p><h2 id="ds-title">${title}</h2><p class="ds-sub">${sub}</p></div></header>`;
+    if (!T) return `${head('Training data · Flood', 'No flood dataset loaded yet', 'Run the flood inspection script and its output will show here.')}
+      <div class="ds-empty"><p>The fire dataset is available. Switch to Fire to see it.</p><button type="button" class="dsb" data-act="ds-fire">${ICON.fire()}<span>Show fire training data</span></button></div>`;
+
+    const px = T.maskShape[0] * T.maskShape[1];
+    const all = T.patches.flatMap((p) => T.masks.map((m) => p[m.k]));
+    const peak = Math.max(...all), xmax = Math.ceil(peak / 40) * 40;
+    const ratios = T.patches.flatMap((p) => [p.murphy / p.schroeder, p.kumarRoy / p.schroeder]);
+    const lo = Math.round((Math.min(...ratios) - 1) * 100), hi = Math.round((Math.max(...ratios) - 1) * 100);
+    const sat = T.bands.filter((b) => b.max >= UINT16);
+    const pct = (v) => `${(v / px * 100).toFixed(2)}%`;
+
+    const axis = (ticks, max, fmt) => `<div class="pl-axis" aria-hidden="true">${ticks.map((t) => `<span style="left:${t / max * 100}%">${fmt(t)}</span>`).join('')}</div>`;
+
+    const fireChart = tableView.fire
+      ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Patch</th><th class="tl">Scene date</th><th class="tl">Path / row</th>${T.masks.map((m) => `<th>${m.name}</th>`).join('')}<th>Fire share (max)</th></tr></thead><tbody>${T.patches.map((p) => { const s = scene(p.id); return `<tr><td>${s.patch}</td><td class="tl">${s.date}</td><td class="tl">${s.path} / ${s.row}</td>${T.masks.map((m) => `<td>${p[m.k]}</td>`).join('')}<td>${pct(Math.max(p.schroeder, p.murphy, p.kumarRoy))}</td></tr>`; }).join('')}</tbody></table></div>`
+      : `<div class="key">${T.masks.map((m) => `<span><i style="background:var(--${m.s})"></i>${m.name}</span>`).join('')}</div>
+        <div class="pl" role="img" aria-label="Fire pixels per patch for three mask algorithms. Table view available.">
+          ${T.patches.map((p) => { const s = scene(p.id); return `<div class="pl-row hit" data-tip="${encodeURIComponent(JSON.stringify({ t: `${s.patch} · ${s.date}`, rows: T.masks.map((m) => [m.s, m.name, `${p[m.k]} px (${pct(p[m.k])})`]) }))}">
+            <div class="pl-lab"><b>${s.patch}</b><small>${s.date} · ${s.path}/${s.row}</small></div>
+            <div class="pl-plot"><div class="gb">${T.masks.map((m, i) => `<div class="gb-r ${m.s}"><span class="gb-b" style="width:${p[m.k] / xmax * 100}%"></span>${i === 0 || p[m.k] === Math.max(p.schroeder, p.murphy, p.kumarRoy) ? `<span class="gb-v">${p[m.k]}</span>` : ''}</div>`).join('')}</div></div>
+          </div>`; }).join('')}
+          ${axis([0, xmax / 4, xmax / 2, xmax * 3 / 4, xmax], xmax, (t) => t)}
+        </div>`;
+
+    const bandChart = tableView.bands
+      ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Channel</th><th>Landsat band</th><th class="tl">Name</th><th>Min</th><th>Max</th><th>Mean</th></tr></thead><tbody>${T.bands.map((b) => `<tr><td>${b.ch}</td><td>${b.band}</td><td class="tl">${b.name}</td><td>${nf(b.min)}</td><td>${nf(b.max)}${b.max >= UINT16 ? ' (saturated)' : ''}</td><td>${nf(b.mean)}</td></tr>`).join('')}</tbody></table></div>`
+      : `<div class="key"><span><i class="k-span"></i>Min to max</span><span><i class="k-mean"></i>Mean</span><span><i style="background:var(--hz-deep);width:4px;height:12px;border-radius:2px"></i>Hits the 65,535 ceiling</span></div>
+        <div class="pl" role="img" aria-label="Pixel value range per band on the 0 to 65,535 scale. Table view available.">
+          ${T.bands.map((b) => `<div class="pl-row hit" data-tip="${encodeURIComponent(JSON.stringify({ t: `Band ${b.band} · ${b.name}`, rows: [[null, 'Min', nf(b.min)], [null, 'Mean', nf(b.mean)], [null, 'Max', nf(b.max) + (b.max >= UINT16 ? ', saturated' : '')]] }))}">
+            <div class="pl-lab">B${b.band} · ${b.name}</div>
+            <div class="pl-plot"><div class="rg"><span class="rg-span" style="left:${b.min / UINT16 * 100}%;width:${(b.max - b.min) / UINT16 * 100}%"></span>${b.max >= UINT16 ? '<span class="rg-sat" style="left:100%"></span>' : ''}<span class="rg-mean" style="left:${b.mean / UINT16 * 100}%"></span></div></div>
+          </div>`).join('')}
+          ${axis([0, 16384, 32768, 49152, UINT16], UINT16, (t) => (t === UINT16 ? '65,535' : t ? `${t / 1024}k` : '0'))}
+        </div>`;
+
+    return `
+      ${head('Training data · Fire', `${T.dataset} sample`, `Read from <code>${T.source}</code>, the output of <code>${T.script}</code>. These describe the dataset the fire model will train on.`)}
+      <p class="ds-note">These describe the data the detector learned from. The model's results are in the Fire today and Tomorrow's risk tabs.</p>
+      <div class="tiles">
+        <div class="tile"><span class="tile-l">Patches inspected</span><span class="tile-v">${T.patches.length}<u>of ${T.sampleSize}</u></span><span class="tile-s">The ones with the most fire</span></div>
+        <div class="tile"><span class="tile-l">Patch size</span><span class="tile-v">${T.imageShape[0]}×${T.imageShape[1]}<u>px</u></span><span class="tile-s">30 m per pixel, ${T.imageDtype}</span></div>
+        <div class="tile"><span class="tile-l">Spectral bands</span><span class="tile-v">${T.imageShape[2]}</span><span class="tile-s">Band 8 (panchromatic) left out</span></div>
+        <div class="tile"><span class="tile-l">Most fire in one patch</span><span class="tile-v">${pct(peak)}</span><span class="tile-s">${peak} of ${nf(px)} pixels</span></div>
+      </div>
+      <section class="cs" aria-labelledby="cs1">
+        <div class="cs-hd"><h3 id="cs1">Fire pixels per patch, by mask algorithm</h3><span class="sp"></span><button type="button" class="tvb" data-act="tv" data-tv="fire">${tableView.fire ? 'Show chart' : 'Show table'}</button></div>
+        <p class="cs-tk">Murphy and Kumar-Roy mark ${lo}–${hi}% more fire pixels than Schroeder in every patch. Even the busiest patch is over 99.7% non-fire, so training has to account for class imbalance.</p>
+        ${fireChart}
+      </section>
+      <section class="cs" aria-labelledby="cs2">
+        <div class="cs-hd"><h3 id="cs2">Pixel values per band</h3><span class="sp"></span><button type="button" class="tvb" data-act="tv" data-tv="bands">${tableView.bands ? 'Show chart' : 'Show table'}</button></div>
+        <p class="cs-tk">${sat.map((b) => b.name).join(' and ')} hit the 16-bit ceiling of 65,535. Fire is brightest in shortwave infrared, so those pixels saturate. Values are raw, not scaled to reflectance.</p>
+        ${bandChart}
+      </section>`;
+  }
+  // =====================================================================
+  // MODEL RESULTS — from the teammate's two figures, cut into panels in model_results/.
+  // Numbers are copied from the figure labels.
+  // =====================================================================
+  const MODEL = {
+    detector: {
+      rows: [
+        // bounds: where each 256 × 256 tile sits, found by matching it against Landsat-8 scene 042/035 from that day
+        { patch: 'p00877', label: 616, model: 573, found: 552, bounds: [[36.23056, -118.4351], [36.30078, -118.3484]] },
+        { patch: 'p00846', label: 474, model: 456, found: 430, bounds: [[36.16029, -118.51927], [36.23056, -118.43257]] },
+        { patch: 'p00847', label: 444, model: 433, found: 420, bounds: [[36.09108, -118.51793], [36.16135, -118.43132]] },
+        { patch: 'p00878', label: 332, model: 329, found: 316, bounds: [[36.16135, -118.43383], [36.23156, -118.34721]] },
+      ],
+    },
+    spread: {
+      cutoff: 0.62,
+      rows: [
+        { kind: 'Good forecast', today: 16, flagged: 52, burned: 31, caught: 31 },
+        { kind: 'Good forecast', today: 20, flagged: 86, burned: 61, caught: 53 },
+        { kind: 'Good forecast', today: 43, flagged: 124, burned: 75, caught: 63 },
+        { kind: 'Typical forecast', today: 37, flagged: 107, burned: 58, caught: 28 },
+      ],
+    },
+  };
+  MODEL.detector.rows.forEach((r) => { r.center = [(r.bounds[0][0] + r.bounds[1][0]) / 2, (r.bounds[0][1] + r.bounds[1][1]) / 2]; });
+  const TABS = [['detector', 'Fire today'], ['spread', "Tomorrow's risk"], ['training', 'Training data']];
+  let dsTab = 'detector';
+  const pc0 = (a, b) => `${Math.round(a / b * 100)}%`;
+  const dsHead = (eye, title, sub) => `<header class="ds-hd"><div><p class="ds-eye">${eye}</p><h2 id="ds-title">${title}</h2><p class="ds-sub">${sub}</p></div></header>`;
+  const tile = (l, v, s) => `<div class="tile"><span class="tile-l">${l}</span><span class="tile-v">${v}</span><span class="tile-s">${s}</span></div>`;
+  const exImgs = (key, i, alts) => `<div class="ex-imgs">${alts.map((a, j) => `<figure><img src="model_results/${key}_${i + 1}_${j + 1}.png" alt="${a}" loading="lazy" width="300" height="300"><figcaption>${a}</figcaption></figure>`).join('')}</div>`;
+  const nextStep = '<p class="ds-note">These are past fires where the correct answer is known. Live CA inputs are already built; connecting the model to them is the next step.</p>';
+
+  function detectorHTML() {
+    const R = MODEL.detector.rows, sum = (k) => R.reduce((a, r) => a + r[k], 0);
+    const L = sum('label'), M = sum('model'), F = sum('found');
+    return `
+      ${dsHead('Model results · Fire detector', 'Finding fire burning today', 'Landsat-8 satellite tiles over Sequoia National Forest, CA, on Aug 27, 2020. Each tile covers 7.7 × 7.7 km at 30 m per pixel.')}
+      <div class="tiles t3">
+        ${tile('Real fire found', pc0(F, L), `${nf(F)} of ${nf(L)} fire pixels in these tiles`)}
+        ${tile('Alerts that were real', pc0(F, M), `${nf(F)} of ${nf(M)} pixels it flagged`)}
+        ${tile('Overall test score', '93% · 82%', 'Found · real, on 3,113 unseen tiles')}
+      </div>
+      <section class="cs" aria-labelledby="ex1">
+        <div class="cs-hd"><h3 id="ex1">The model next to the correct answer</h3></div>
+        <p class="cs-tk">Left: what the satellite sees, in infrared bands where fire glows. Middle: what the model marked as fire, in red. Right: the correct answer, in orange. They should match closely.</p>
+        <div class="exs">${R.map((r, i) => `<article class="ex">
+          ${exImgs('det', i, ['Satellite view', 'Model: fire in red', 'Correct answer'])}
+          <p class="ex-st"><b>Caught ${r.found} of ${r.label} fire pixels (${pc0(r.found, r.label)})</b><span>${r.model - r.found} false-alarm pixels · tile ${r.patch}</span></p>
+        </article>`).join('')}</div>
+      </section>
+      ${nextStep}`;
+  }
+
+  function spreadHTML() {
+    const D = MODEL.spread;
+    return `
+      ${dsHead("Model results · Spread predictor", "Forecasting tomorrow's fire", '64 × 64 km areas in 1 km squares, from past fires in the Next Day Wildfire Spread test data. That data has no locations, so these can’t go on the map.')}
+      <div class="tiles t3">
+        ${tile('Next-day fire caught', '52%', 'vs 27% for “tomorrow = today”')}
+        ${tile('Flagged squares that burn', '1 in 4', 'Leans toward warning too much')}
+        ${tile('Risk cutoff', `${Math.round(D.cutoff * 100)}%`, 'Squares above this count as fire')}
+      </div>
+      <section class="cs" aria-labelledby="ex2">
+        <div class="cs-hd"><h3 id="ex2">Today's fire, the forecast, and what burned</h3></div>
+        <p class="cs-tk">Left: where fire is burning on day 1. Middle: the model's chance of fire on day 2. Brighter means more likely, and the cyan outline is today's fire, so you can see where it expects growth. Right: what actually burned on day 2.</p>
+        <div class="exs">${D.rows.map((r, i) => `<article class="ex">
+          ${exImgs('spr', i, ['Day 1: fire today', 'Forecast for day 2', 'Day 2: what burned'])}
+          <p class="ex-st"><b>${r.kind}: caught ${r.caught} of ${r.burned} km² (${pc0(r.caught, r.burned)})</b><span>Fire today ${r.today} km² · flagged ${r.flagged} km² · burned ${r.burned} km²</span></p>
+        </article>`).join('')}</div>
+        <p class="cs-tk">The first three are among the model's best forecasts. The fourth is typical and matches its overall score of about half. In every case it flags a larger area than burns, which is the safer mistake for responders.</p>
+      </section>
+      ${nextStep}`;
+  }
+
+  function dsHTML() {
+    const body = dsTab === 'detector' ? detectorHTML() : dsTab === 'spread' ? spreadHTML() : trainingHTML();
+    return `<div class="ds-in">
+      <div class="ds-bar"><div class="tabs" role="tablist" aria-label="Model results">${TABS.map(([k, l]) => `<button type="button" role="tab" class="tab" data-tab="${k}" aria-selected="${k === dsTab}" tabindex="${k === dsTab ? 0 : -1}">${l}</button>`).join('')}</div><span class="sp"></span><button type="button" class="thb" data-act="close" aria-label="Close" title="Close">${xmark}</button></div>
+      <div class="ds-body" role="tabpanel">${body}</div>
+    </div>`;
+  }
+  function renderDS() {
+    DS.dataset.hz = dsTab === 'training' ? S.hz : 'fire';      // both models are fire models
+    const top = DS.scrollTop;
+    DS.innerHTML = dsHTML();
+    DS.append(TIP);                                           // inside the dialog, so it draws above the modal layer
+    DS.scrollTop = top;
+  }
+  function openDS() {
+    renderDS();
+    DS.showModal();
+    DS.scrollTop = 0;
+    $('[data-act="close"]', DS)?.focus();
+  }
+  DS.addEventListener('click', (e) => {
+    if (e.target === DS) { DS.close(); return; }             // click on the backdrop
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.tab) { dsTab = b.dataset.tab; renderDS(); DS.scrollTop = 0; $(`[data-tab="${dsTab}"]`, DS)?.focus(); return; }
+    if (b.dataset.act === 'close') DS.close();
+    else if (b.dataset.act === 'tv') { tableView[b.dataset.tv] = !tableView[b.dataset.tv]; renderDS(); $(`[data-tv="${b.dataset.tv}"]`, DS)?.focus(); }
+    else if (b.dataset.act === 'ds-fire') { DS.close(); setHz('fire'); openDS(); }
+  });
+  DS.addEventListener('keydown', (e) => {                   // arrow keys move between tabs
+    const t = e.target.closest?.('[role="tab"]');
+    if (!t || !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+    e.preventDefault();
+    const i = TABS.findIndex(([k]) => k === dsTab), n = TABS.length;
+    dsTab = TABS[(i + (e.key === 'ArrowRight' ? 1 : n - 1)) % n][0];
+    renderDS(); DS.scrollTop = 0; $(`[data-tab="${dsTab}"]`, DS)?.focus();
+  });
+  DS.addEventListener('close', () => { TIP.hidden = true; $('[data-act="data"]', active())?.focus({ preventScroll: true }); });
+  DS.addEventListener('pointermove', (e) => {
+    const h = e.target.closest?.('[data-tip]');
+    if (!h) { TIP.hidden = true; return; }
+    const d = JSON.parse(decodeURIComponent(h.dataset.tip));
+    TIP.innerHTML = `<b>${d.t}</b>` + d.rows.map(([s, l, v]) => `<div>${s ? `<i style="background:var(--${s})"></i>` : ''}${l}: ${v}</div>`).join('');
+    TIP.hidden = false;
+    const w = TIP.offsetWidth, hh = TIP.offsetHeight;
+    TIP.style.left = `${Math.min(e.clientX + 14, innerWidth - w - 8)}px`;
+    TIP.style.top = `${e.clientY + 16 + hh > innerHeight ? e.clientY - hh - 12 : e.clientY + 16}px`;
+  });
+  DS.addEventListener('pointerleave', () => { TIP.hidden = true; });
+  DS.addEventListener('scroll', () => { TIP.hidden = true; });
+
+  // =====================================================================
+  // LIVE FIRE DATA — from the SkyAlert backend (backend/dashboard.py):
+  //   /api/fires         today's detections, NASA FIRMS
+  //   /api/fire-context  place, weather and fire-weather index for one spot
+  // Flood stays on sample data: there is no live flood source yet.
+  // =====================================================================
+  const CA = [[32.5, -124.5], [42.0, -114.1]];                // first view: California
+  const LEVEL = { low: 1, moderate: 2, high: 3, critical: 4 };
+  const CLUSTER_KM = 15, CANDIDATES = 8;                      // detections this close count as one fire; strongest 8 get weather
+  const BANNER = $('#banner'), LOADER = $('#loader'), BUSY = $('#busyDot');
+  let FIRES = [], pick = null, liveSeq = 0, MODEL_STATUS = { ready: false };
+  const ctxCache = new Map(), fcCache = new Map();
+  const kmBetween = (a, b) => Math.hypot((a[0] - b[0]) * 111.32, (a[1] - b[1]) * 111.32 * Math.cos(a[0] * Math.PI / 180));
+  const compass = (deg) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+
+  async function getJSON(url, ms) {
+    const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
+    try {
+      const r = await fetch(url, { signal: c.signal });
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return await r.json();
+    } finally { clearTimeout(t); }
+  }
+  function getCtx(lat, lon) {                                 // one request per ~1 km spot, shared by everything that asks
+    const k = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+    if (!ctxCache.has(k)) ctxCache.set(k, getJSON(`/api/fire-context?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`, 30000)
+      .catch((err) => { ctxCache.delete(k); return { location: null, weather: null, reasons: [], errors: [String(err)] }; }));
+    return ctxCache.get(k);
+  }
+  function getForecast(lat, lon) {                            // the spread model's 64 x 64 km forecast around a spot
+    const k = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+    if (!fcCache.has(k)) fcCache.set(k, getJSON(`/api/spread-forecast?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`, 90000)
+      .catch((err) => { fcCache.delete(k); return { status: 'inputs_unavailable', note: String(err) }; }));
+    return fcCache.get(k);
+  }
+  // Model chance -> risk level. 62% is the model's own cutoff for "this square burns tomorrow".
+  const chanceLevel = (p) => (p >= 62 ? 4 : p >= 40 ? 3 : p >= 20 ? 2 : 1);
+  async function applyForecast(it) {
+    it.fc = await getForecast(...it.latlng);
+    if (it.fc.status !== 'ok') return;
+    it.prob = Math.round(it.fc.chance_near * 100);
+    it.risk = chanceLevel(it.prob);
+  }
+  const heatCache = new WeakMap();
+  function heatURL(fc) {                                      // forecast grid -> see-through PNG, brighter = more likely
+    if (heatCache.has(fc)) return heatCache.get(fc);
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'), img = g.createImageData(64, 64);
+    const stops = [[0, [247, 223, 166]], [0.35, [242, 193, 78]], [0.62, [245, 130, 58]], [1, [217, 87, 87]]];
+    fc.probability.forEach((row, y) => row.forEach((p, x) => {
+      if (p < 0.05) return;
+      const j = stops.findIndex(([at]) => p <= at), [a0, c0] = stops[Math.max(0, j - 1)], [a1, c1] = stops[Math.max(0, j)];
+      const t = a1 === a0 ? 0 : (p - a0) / (a1 - a0), o = (y * 64 + x) * 4;
+      for (let k = 0; k < 3; k++) img.data[o + k] = Math.round(c0[k] + (c1[k] - c0[k]) * t);
+      img.data[o + 3] = Math.round(255 * Math.min(0.85, 0.2 + 0.75 * p));
+    }));
+    g.putImageData(img, 0, 0);
+    const url = c.toDataURL(); heatCache.set(fc, url); return url;
+  }
+  function clustersIn(b) {                                    // strongest detection first; nearby ones join it
+    const inside = FIRES.filter((f) => b.contains([f.latitude, f.longitude])).sort((a, z) => z.frp - a.frp);
+    const out = [];
+    for (const f of inside) {
+      const p = [f.latitude, f.longitude], seen = `${f.acq_date} ${f.acq_time_utc}`;
+      const c = out.find((x) => kmBetween(x.latlng, p) < CLUSTER_KM);
+      if (c) { c.count += 1; if (seen > c.last) c.last = seen; }
+      else if (out.length < CANDIDATES) out.push({ latlng: p, frp: f.frp, count: 1, last: seen });
+    }
+    return { clusters: out, total: inside.length };
+  }
+  function clusterAround(f) {                                 // one clicked fire dot plus the detections near it
+    const p = [f.latitude, f.longitude], near = FIRES.filter((x) => kmBetween(p, [x.latitude, x.longitude]) < CLUSTER_KM);
+    return { latlng: p, frp: Math.max(...near.map((x) => x.frp)), count: near.length, last: near.map((x) => `${x.acq_date} ${x.acq_time_utc}`).sort().pop(), fire: true };
+  }
+  const STATES = { Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA', Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', Florida: 'FL', Georgia: 'GA',
+    Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA', Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD',
+    Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN', Mississippi: 'MS', Missouri: 'MO', Montana: 'MT', Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+    'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', Ohio: 'OH', Oklahoma: 'OK', Oregon: 'OR', Pennsylvania: 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+    'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT', Vermont: 'VT', Virginia: 'VA', Washington: 'WA', 'West Virginia': 'WV', Wisconsin: 'WI', Wyoming: 'WY', 'District of Columbia': 'DC' };
+  function placeName(loc) {                                   // "Madera County, California" -> "Madera County, CA"
+    if (!loc || !loc.name) return null;
+    if (loc.country !== 'United States') return loc.name;
+    const parts = loc.name.split(', '), last = parts[parts.length - 1];
+    if (STATES[last]) parts[parts.length - 1] = STATES[last];
+    return parts.join(', ');
+  }
+  function toItem(c, ctx, picked) {
+    const r = ctx.weather && ctx.weather.risk;
+    return {
+      id: `${c.latlng[0].toFixed(3)}, ${c.latlng[1].toFixed(3)}`,
+      name: placeName(ctx.location) || (picked ? 'Picked spot' : 'Unknown area'),
+      risk: r ? LEVEL[r.key] || 1 : 1, prob: r ? Math.round(r.index) : 0, fwi: r ? Math.round(r.index) : 0, conf: 0,
+      metric: picked ? '—' : `${c.frp.toFixed(1)} MW`,
+      evidence: picked ? 'No detection here' : `${c.count} detection${c.count === 1 ? '' : 's'}`,
+      window: picked ? 'Weather for the spot you clicked' : `Last detected ${c.last} UTC`,
+      latlng: c.latlng, ctx, reasons: ctx.reasons || [], picked: !!picked,
+    };
+  }
+  function measOf(it) {
+    const w = it && it.ctx.weather;
+    if (!w) return ['Temperature', 'Wind', 'Humidity', 'Rain, past week'].map((l) => ({ l, v: '—', u: '', s: 'Weather unavailable' }));
+    const c = w.current, x = w.window, r = w.rain_past_week_in;
+    return [
+      { l: 'Temperature', v: `${Math.round(c.temperature_f)}`, u: '°F', s: `Up to ${Math.round(x.max_temp_f)}°F in the next 24 h` },
+      { l: 'Wind', v: `${Math.round(c.wind_mph)}`, u: 'mph', s: `From ${compass(c.wind_direction)}${x.max_gust_mph != null ? `, gusts ${Math.round(x.max_gust_mph)}` : ''}` },
+      { l: 'Humidity', v: `${Math.round(c.humidity)}`, u: '%', s: `Drops to ${Math.round(x.min_humidity)}% in the next 24 h` },
+      { l: 'Rain, past week', v: r.toFixed(2), u: 'in', s: r < 0.1 ? 'Very dry' : r >= 0.5 ? 'Wet' : 'Some rain' },
+    ];
+  }
+  function seriesOf(it) {
+    const h = (it && it.ctx.weather && it.ctx.weather.series) || [];
+    const obs = h.filter((x) => x.past).map((x) => x.ffwi), pred = h.filter((x) => !x.past).map((x) => x.ffwi);
+    return { name: 'Fire-weather index at this spot', max: 100, threshold: 50, live: true, obs: obs.length ? obs : pred.slice(0, 1), pred };
+  }
+  function liveData(items, total) {
+    const top = items.reduce((a, b) => (b.prob > a.prob ? b : a), items[0]);
+    const anyFire = items.some((x) => !x.picked);
+    const m = MODEL_STATUS.ready && items.some((x) => x.fc && x.fc.status === 'ok');   // the model ran on today's data
+    return {
+      key: 'fire', live: true, modelReady: m, unit: m ? '%' : '/100', count: total, items,
+      region: 'CA', window: m ? 'Tomorrow' : 'Next 24 h',
+      model: m ? "SkyAlert spread model, on today's FIRMS fires and GRIDMET weather" : 'Fosberg fire-weather index, from Open-Meteo weather',
+      headline: !anyFire ? 'No fires detected in CA in the last 2 days'
+        : m ? `Highest chance of fire tomorrow: ${top.prob}% near ${top.name}` : `Fire weather is ${RISK[top.risk].toLowerCase()} near ${top.name}`,
+      risk: top.risk, prob: top.prob,
+      probLabel: m ? 'Chance of fire tomorrow within 2 km, from the SkyAlert spread model' : 'Fire-weather index (0–100), worst hour in the next 24 h',
+      regionLabel: m ? 'highest chance' : 'highest index',
+      metricName: 'Fire power (FRP)', listTitle: m ? 'Fires in CA, highest chance first' : 'Fires in CA, highest index first',
+      get meas() { return measOf(this.items[S.sel]); },
+      get series() { return seriesOf(this.items[S.sel]); },
+      layers: { observed: 'Fire detections, last 2 days', predicted: m ? "Model: chance of fire tomorrow" : MODEL_STATUS.ready ? 'Model predictions (inputs unavailable)' : 'Model predictions (waiting for weights)', context: '' },
+    };
+  }
+  async function buildLive(withModel = true) {
+    const seq = ++liveSeq;
+    const { clusters, total } = clustersIn(S.liveBounds);
+    let items = await Promise.all(clusters.map(async (c) => toItem(c, await getCtx(...c.latlng))));
+    if (pick) {                                               // the spot or fire dot you clicked joins the list
+      const it = toItem(pick, await getCtx(...pick.latlng), !pick.fire);
+      it.clicked = true;
+      items = items.filter((x) => kmBetween(x.latlng, it.latlng) >= CLUSTER_KM).concat(it);
+    }
+    if (!items.length) { const c = S.liveBounds.getCenter(), p = { latlng: [c.lat, c.lng] }; items = [toItem(p, await getCtx(c.lat, c.lng), true)]; }
+    if (withModel && MODEL_STATUS.ready) await Promise.all(items.map(applyForecast));   // the model's chance replaces the index
+    items.sort((a, b) => b.prob - a.prob);                    // highest first
+    return seq === liveSeq ? liveData(items, total) : null;   // null: a newer click already replaced this one
+  }
+  async function refreshLive(sel = 0) {
+    BUSY.hidden = false;
+    if (!BUSY.textContent.startsWith('Running')) BUSY.textContent = 'Updating fires…';
+    const D = await buildLive();
+    if (!D) return;
+    while (busy) await new Promise((r) => setTimeout(r, 80));  // never rebuild the layout mid-transition
+    BUSY.hidden = true;
+    BUSY.textContent = 'Updating fires…';
+    DATA.fire = D;
+    if (S.hz !== 'fire') return;
+    const ci = D.items.findIndex((x) => x.clicked);
+    S.sel = ci >= 0 ? ci : Math.min(sel, D.items.length - 1);
+    render();
+    drawData();
+    const it = D.items[S.sel];
+    LIVE.textContent = `${D.items.length} spots shown. ${it.name}: fire-weather index ${it.prob}, ${RISK[it.risk]}.`;
+  }
+  async function startLive() {
+    if (!window.L) return false;
+    try {
+      FIRES = await getJSON('/api/fires', 90000);
+      MODEL_STATUS = await getJSON('/api/model-status', 20000).catch(() => ({ ready: false }));
+      S.liveBounds = L.latLngBounds(CA);
+      const D = await buildLive(false);                     // show today's data first; the model fills in after
+      if (D) DATA.fire = D;
+      return true;
+    } catch (err) {
+      BANNER.innerHTML = `Live data isn't available (${err.message || err}), so this is sample data. Start the backend with <code>python -m backend.dashboard</code> and open <code>http://127.0.0.1:8000/prototype/</code>.`;
+      BANNER.hidden = false;
+      return false;
+    }
+  }
+
+  // =====================================================================
+  // INTERACTION
+  // =====================================================================
+  function setMode(m) {
+    if (busy || m === S.mode) return;
+    S.mode = m; S.focus = false;
+    render();
+    drawData();
+    fitView(true);
+    LIVE.textContent = m === 'model' ? 'Showing the fire detector on a past fire, Sequoia National Forest, August 2020.' : "Showing today's live fires.";
+  }
+  function selectTile(i) {
+    if (busy) return;
+    S.mSel = i;
+    render();
+    drawData();
+    const r = MODEL.detector.rows[i];
+    LIVE.textContent = `Tile ${i + 1}: caught ${r.found} of ${r.label} fire pixels.`;
+  }
+  function select(i) {
+    if (busy) return;
+    const fly = S.view === 'mv' && !(S.hz === 'fire' && S.mode === 'model');   // in the map view, picking a fire flies to it
+    if (i === S.sel) { if (fly) { S.focus = !S.focus; drawMarkers(); fitView(true); } return; }   // same fire again: toggle between it and the top 5
+    const prev = DATA[S.hz].items[S.sel].prob, prevId = DATA[S.hz].items[S.sel].id, prevFwi = DATA[S.hz].items[S.sel].fwi;
+    S.sel = i;
+    render();
+    drawMarkers();
+    if (fly) { S.focus = true; fitView(true); }
+    const it = DATA[S.hz].items[i];
+    if (S.view === 'ov' && !REDUCE.matches) countUp($('.ov-num .fn', OV), prev, it.prob, 420, 0);
+    if (S.view === 'mv') rollCoords($('.selp-id', MV), prevId, it.id, 600);
+    const fwiEl = $('.fwi-n', MV);                             // fire-weather index counts from the last fire's score
+    if (S.view === 'mv' && fwiEl && Number.isFinite(prevFwi) && !REDUCE.matches) countUp(fwiEl, prevFwi, it.fwi, 600, 0);
+    LIVE.textContent = `${it.name} selected: ${it.prob} percent, ${RISK[it.risk]} risk.`;
+  }
+  function setHz(hz) {
+    if (busy || hz === S.hz) return;
+    const prev = S.hz;
+    S.hz = hz; S.sel = 0; S.mode = 'live'; S.focus = false;
+    APP.dataset.hz = hz;
+    render(prev);                                             // toggles start on the old side…
+    requestAnimationFrame(() => requestAnimationFrame(() => {  // …then flip, so the indicator slides
+      $$('.hzt').forEach((t) => { t.dataset.hz = hz; $$('button', t).forEach((b) => { const on = b.dataset.setHz === hz; b.setAttribute('aria-checked', on); b.tabIndex = on ? 0 : -1; }); });
+    }));
+    const lay = active();
+    lay.classList.remove('is-swapping'); void lay.offsetWidth; lay.classList.add('is-swapping');
+    setTimeout(() => lay.classList.remove('is-swapping'), 500);
+    drawData();
+    fitView(true);
+    LIVE.textContent = `${hz === 'fire' ? 'Fire' : 'Flood'} mode.`;
+  }
+  function setTheme(t) {
+    S.theme = t;
+    document.documentElement.dataset.theme = t;
+    store.set('theme', t);
+    setTiles();
+    render();
+  }
+
+  APP.addEventListener('click', (e) => {
+    const b = e.target.closest?.('button');
+    if (!b || busy) return;
+    if (b.dataset.setHz) setHz(b.dataset.setHz);
+    else if (b.dataset.act === 'theme') setTheme(S.theme === 'dark' ? 'light' : 'dark');
+    else if (b.dataset.act === 'data') openDS();
+    else if (b.dataset.act === 'focus') go('mv');
+    else if (b.dataset.act === 'model') { S.mode = 'model'; render(); drawData(); go('mv'); }
+    else if (b.dataset.mode) setMode(b.dataset.mode);
+    else if (b.dataset.msel != null) selectTile(+b.dataset.msel);
+    else if (b.dataset.act === 'back') go('ov');
+    else if (b.dataset.act === 'zin') MAP?.zoomIn();
+    else if (b.dataset.act === 'zout') MAP?.zoomOut();
+    else if (b.dataset.sel != null) select(+b.dataset.sel);
+  });
+  APP.addEventListener('change', (e) => {
+    const mk = e.target.dataset?.mlayer;
+    if (mk) { S.mLayers[mk] = e.target.checked; drawData(); return; }
+    const k = e.target.dataset?.layer;
+    if (!k) return;
+    S.layers[k] = e.target.checked;
+    render();
+    drawData();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (DS.open) return;                                      // the dialog handles its own keys (Escape closes it)
+    if (e.key === 'Escape' && S.view === 'mv') { go('ov'); return; }
+    const b = e.target.closest?.('.hzt button');
+    if (b && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+      e.preventDefault();
+      const hz = S.hz === 'fire' ? 'flood' : 'fire';
+      setHz(hz);
+      $(`[data-set-hz="${hz}"]`, active())?.focus();
+    }
+  });
+
+  // =====================================================================
+  // START
+  // =====================================================================
+  document.documentElement.dataset.theme = S.theme;
+  startLive().then(() => {
+    LOADER.hidden = true;
+    render();
+    MV.inert = true;
+    initMap();
+    layoutMap();
+    document.fonts?.ready.then(() => { if (!busy) layoutMap(); });
+    let raf = 0;
+    new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { if (!busy) layoutMap(); }); }).observe(APP);
+    window.skyalertFlow = { go, state: S, setHz, select, refreshLive };
+    if (MODEL_STATUS.ready && DATA.fire.live) { BUSY.textContent = 'Running the spread model on today\'s data…'; refreshLive(S.sel); }
+  });
+})();
+</script>
+</body>
+</html>
