@@ -136,7 +136,7 @@ def main():
     write_summary(report)
     for path_row in LOCATIONS:
         draw_location(path_row, [view for view in views if view[0].path_row == path_row], report)
-    draw_map(views, report)
+    draw_map(views)
     print(f"Wrote figures to {FIGURES} and the map and tables to {OUTPUT}")
 
 
@@ -194,16 +194,23 @@ def draw_location(path_row, views, report):
     plt.close(fig)
 
 
-def draw_map(views, report):
-    center = [report.center_lat.mean(), report.center_lon.mean()]
-    fire_map = folium.Map(location=center, zoom_start=6, tiles="OpenStreetMap")
-    for row, _, predicted, truth, fire_points in views:
-        if not fire_points:
-            continue
-        latitudes, longitudes = zip(*fire_points)
+def draw_map(views):
+    flagged = [view for view in views if view[4]]
+    marker_points = [[float(np.mean(lat)), float(np.mean(lon))] for lat, lon in (zip(*view[4]) for view in flagged)]
+    latitudes, longitudes = zip(*marker_points)
+    # Centered between the two fires, so both are in view even before fit_bounds runs.
+    center = [(min(latitudes) + max(latitudes)) / 2, (min(longitudes) + max(longitudes)) / 2]
+    # OpenStreetMap tiles answer 403 to a map opened from a local file, so use Esri imagery.
+    fire_map = folium.Map(
+        location=center,
+        zoom_start=6,
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attr="Esri, Maxar, Earthstar Geographics",
+    )
+    for (row, _, predicted, truth, _), point in zip(flagged, marker_points):
         hits = int((predicted & truth).sum())
         folium.CircleMarker(
-            location=[float(np.mean(latitudes)), float(np.mean(longitudes))],
+            location=point,
             radius=4 + min(int(predicted.sum()) ** 0.5, 20),
             color="red",
             fill=True,
@@ -214,6 +221,7 @@ def draw_map(views, report):
                 f"Label: {int(truth.sum())} fire px, {hits} found"
             ),
         ).add_to(fire_map)
+    fire_map.fit_bounds(marker_points, padding=(40, 40))
     fire_map.save(str(OUTPUT / "detector_map.html"))
 
 
