@@ -11,7 +11,7 @@ import Loader from './components/Loader.jsx'
 import { RISK, REDUCE, countUp, rollCoords, store } from './lib/format.js'
 import { SAMPLE, sketchBounds, sketchToLatLng } from './lib/sample.js'
 import { MODEL, modelBounds } from './lib/model.js'
-import { CA, buildLive, clusterAround } from './lib/live.js'
+import { CA, buildLive } from './lib/live.js'
 import { getFires, getModelStatus } from './lib/api.js'
 
 const TOP_N = 5                                                   // the map view zooms to the 5 highest-index fires; the list still shows all of them
@@ -39,7 +39,7 @@ export default function App() {
   const [map, setMapState] = useState(null)
 
   const app = useRef(null), ov = useRef(null), mv = useRef(null), fly = useRef(null), mapRef = useRef(null)
-  const view = useRef('ov'), busy = useRef(false), pick = useRef(null), liveSeq = useRef(0), flyT = useRef(0)
+  const view = useRef('ov'), busy = useRef(false), liveSeq = useRef(0), flyT = useRef(0)
   const D = hz === 'fire' ? live || SAMPLE.fire : SAMPLE.flood
   const S = useRef({}); S.current = { hz, sel, focus, mode, D, fires, modelStatus }   // latest state for the imperative code below
   const setMap = (m) => { mapRef.current = m; setMapState(m) }
@@ -95,6 +95,8 @@ export default function App() {
     const k = REDUCE.matches ? 0.001 : 1, A = []
     const anim = (el, kf, o) => { const a = el.animate(kf, { duration: o.d * k, delay: (o.delay || 0) * k, easing: o.e || 'cubic-bezier(.65, 0, .35, 1)', fill: 'both' }); A.push(a); return a }
     const visible = (r) => r && r.w > 0 && r.h > 0
+    const textEl = (el) => { const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (t) => t.textContent.trim() ? 1 : 3 }); return w.nextNode()?.parentElement || el }   // the first element that actually holds text
+    const fontPx = (el) => parseFloat(getComputedStyle(textEl(el)).fontSize)
     const pieces = (layer) => [...layer.querySelectorAll('[data-k], .pc')].filter((el) => !el.parentElement.closest('[data-k], .pc'))   // leaf pieces only: a child moves with its parent
     const numStyle = (el) => { const cs = getComputedStyle(el), p = getComputedStyle(el.querySelector('.pct')); return { r: rel(el), v: +el.querySelector('.fn').textContent, fs: cs.fontSize, fw: cs.fontWeight, ls: cs.letterSpacing, c: cs.color, pfs: p.fontSize, pml: p.marginLeft, pc: p.color, pfw: p.fontWeight, pls: p.letterSpacing } }
     from.inert = true
@@ -123,7 +125,7 @@ export default function App() {
     for (const el of newP) {
       const o = el.dataset.k && oldByK.get(el.dataset.k), n = newR.get(el)
       if (!o || !visible(n)) continue
-      const r = oldR.get(o), s = r.h / n.h
+      const r = oldR.get(o), s = fontPx(o) / fontPx(el)   // scale by text size, not box height: a piece that wraps to 2 rows in one layout would otherwise blow up 2x
       sharedOld.add(o); sharedNew.add(el)
       anim(el, [{ transform: `translate(${r.x - n.x}px, ${r.y - n.y}px) scale(${s})`, opacity: 0 }, { opacity: 0, offset: 0.3 }, { opacity: 1, offset: 0.62 }, { transform: 'none', opacity: 1 }], { d: MOVE, delay: lead })
       anim(o, [{ transform: 'none', opacity: 1 }, { opacity: 1, offset: 0.12 }, { opacity: 0, offset: 0.42 }, { transform: `translate(${n.x - r.x}px, ${n.y - r.y}px) scale(${1 / s})`, opacity: 0 }], { d: MOVE, delay: lead })
@@ -177,7 +179,7 @@ export default function App() {
   async function refreshLive(selIdx = 0) {
     const seq = ++liveSeq.current
     setBusyText((t) => (t && t.startsWith('Running') ? t : 'Updating fires…'))
-    const d = await buildLive({ fires: S.current.fires, bounds: CA, pick: pick.current, modelStatus: S.current.modelStatus, withModel: true })
+    const d = await buildLive({ fires: S.current.fires, bounds: CA, modelStatus: S.current.modelStatus, withModel: true })
     if (seq !== liveSeq.current) return                           // a newer click already replaced this one
     while (busy.current) await sleep(80)                          // never rebuild the layout mid-transition
     setBusyText(null)
@@ -199,7 +201,7 @@ export default function App() {
         const f = await getFires()
         ms = await getModelStatus()
         S.current.fires = f; S.current.modelStatus = ms
-        const d = await buildLive({ fires: f, bounds: CA, pick: null, modelStatus: ms, withModel: false })
+        const d = await buildLive({ fires: f, bounds: CA, modelStatus: ms, withModel: false })
         setFires(f); setModelStatus(ms); setLive(d)
         ok = true
       } catch (err) {
@@ -272,15 +274,6 @@ export default function App() {
     setMLayer(k, v) { setMLayers((l) => ({ ...l, [k]: v })) },
     zoomIn() { mapRef.current?.zoomIn() },
     zoomOut() { mapRef.current?.zoomOut() },
-    mapClick(e) {                                                 // a fire dot (within 10 px), or any other spot: its place, weather and index
-      const { D, hz, mode, fires } = S.current, m = mapRef.current
-      if (!D.live || hz !== 'fire' || mode !== 'live' || busy.current || !m) return
-      const at = m.latLngToContainerPoint(e.latlng)
-      let near = null, best = 10
-      for (const f of fires) { const dd = at.distanceTo(m.latLngToContainerPoint([f.latitude, f.longitude])); if (dd < best) { best = dd; near = f } }
-      pick.current = near ? clusterAround(fires, near) : { latlng: [e.latlng.lat, e.latlng.lng] }
-      refreshLive(0)
-    },
   }
   const actRef = useRef(act); actRef.current = act
 

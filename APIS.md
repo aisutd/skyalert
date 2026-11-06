@@ -28,7 +28,7 @@ The API is data only (JSON); all UI is in `frontend/src`. The React app reaches 
 |---|---|---|
 | `GET /api/summary` | Detection count, region, date range | Not used by the UI right now |
 | `GET /api/fires` | Every fire detection as JSON (cleaned, with ready-to-show `confidence_label` and `acq_time_utc`) | Loaded once by `App.jsx`: the map's fire dots, and the fire list (nearby detections grouped, `lib/live.js`) |
-| `GET /api/fire-context?lat=&lon=` | Place name, weather and risk level for one spot | Each fire in the list, and any spot clicked on the map |
+| `GET /api/fire-context?lat=&lon=` | Place name, weather and risk level for one spot | Each fire in the list |
 | `GET /api/model-status` | Whether the spread model's weights are in `data/training/` and it can run | `frontend/src/lib/api.js`, `prototype/index.html` |
 | `GET /api/spread-forecast?lat=&lon=` | The spread model's chance of fire tomorrow per 1 km square, 64 × 64 km around a spot, plus the input dates | `frontend/src/lib/api.js`, `prototype/index.html` |
 

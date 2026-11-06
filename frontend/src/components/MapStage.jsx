@@ -1,7 +1,7 @@
 // One React Leaflet map under both layouts. The overview clips it to its slot, so the map view only widens the clip.
 import { Fragment, memo, useMemo } from 'react'
 import L from 'leaflet'
-import { CircleMarker, ImageOverlay, MapContainer, Marker, Rectangle, SVGOverlay, TileLayer, useMapEvent } from 'react-leaflet'
+import { CircleMarker, ImageOverlay, MapContainer, Marker, Rectangle, SVGOverlay, TileLayer } from 'react-leaflet'
 import { RISK } from '../lib/format.js'
 import { MODEL } from '../lib/model.js'
 import { CA, heatURL } from '../lib/live.js'
@@ -16,7 +16,7 @@ function NumberedMarkers({ D, hz, sel, focus, onSelect }) {       // 1, 2, 3… 
   return D.items.map((it, i) => {
     const on = i === sel
     const icon = L.divIcon({
-      className: 'lm-mk' + (on ? ' on' : '') + (on && focus ? ' lm-focus' : '') + (it.picked ? ' lm-pick' : ''),
+      className: 'lm-mk' + (on ? ' on' : '') + (on && focus ? ' lm-focus' : ''),
       iconSize: [24, 24], iconAnchor: [12, 12],
       html: `<span class="lm-k">${i + 1}</span><span class="lm-lab">${it.name.replace(/</g, '&lt;')}</span>`,
     })
@@ -52,18 +52,12 @@ function ModelTiles({ mSel, mLayers, onSelectTile }) {           // the detector
   })
 }
 
-function ClickToPick({ onMapClick }) {                           // a fire dot, or any other spot: its place, weather and index
-  useMapEvent('click', onMapClick)
-  return null
-}
-
 export default function MapStage({ s, act, setMap }) {   // attribution is our own .attr line, so Leaflet's is off
   const { D, hz, mode, layers } = s
   const modelMode = hz === 'fire' && mode === 'model'
   return (
     <MapContainer className="lmap" ref={setMap} bounds={CA} zoomControl={false} attributionControl={false} scrollWheelZoom={false} zoomSnap={0.25} zoomDelta={0.5} preferCanvas role="region" aria-label="Map of fires and fire-weather risk">
       <TileLayer key={s.theme} url={TILES[s.theme].url} maxZoom={16} />
-      <ClickToPick onMapClick={act.mapClick} />
       {modelMode ? <ModelTiles mSel={s.mSel} mLayers={s.mLayers} onSelectTile={act.selectTile} /> : <>
         {D.live && layers.predicted && D.modelReady && D.items.filter((it) => it.fc && it.fc.status === 'ok').map((it, i) => {
           const b = it.fc.bounds

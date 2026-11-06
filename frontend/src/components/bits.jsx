@@ -42,7 +42,7 @@ export function Risk({ l, cls = '' }) {                           // 'bare': bar
 }
 
 export function Kind({ D, it }) {
-  return D.live ? <span className="kd">{it && it.picked ? 'Picked spot' : 'Live fire'}</span> : <span className="kd"><i aria-hidden="true" />Predicted</span>
+  return D.live ? <span className="kd">{it && it.picked ? 'No fire' : 'Live fire'}</span> : <span className="kd"><i aria-hidden="true" />Predicted</span>
 }
 
 export function Legend({ D }) {
@@ -120,3 +120,4 @@ export function Chart({ series: Sr, layers: Ly, w, h, pad, bars, xlabels }) {
     </svg>
   )
 }
+

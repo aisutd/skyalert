@@ -24,11 +24,6 @@ export function clustersIn(fires, bounds) {                       // strongest d
   return { clusters: out, total: inside.length }
 }
 
-export function clusterAround(fires, f) {                         // one clicked fire dot plus the detections near it
-  const p = [f.latitude, f.longitude], near = fires.filter((x) => kmBetween(p, [x.latitude, x.longitude]) < CLUSTER_KM)
-  return { latlng: p, frp: Math.max(...near.map((x) => x.frp)), count: near.length, last: near.map((x) => `${x.acq_date} ${x.acq_time_utc}`).sort().pop(), fire: true }
-}
-
 const STATES = { Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA', Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', Florida: 'FL', Georgia: 'GA',
   Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA', Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD',
   Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN', Mississippi: 'MS', Missouri: 'MO', Montana: 'MT', Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
@@ -46,11 +41,11 @@ function toItem(c, ctx, picked) {
   const r = ctx.weather && ctx.weather.risk
   return {
     id: `${c.latlng[0].toFixed(3)}, ${c.latlng[1].toFixed(3)}`,
-    name: placeName(ctx.location) || (picked ? 'Picked spot' : 'Unknown area'),
+    name: placeName(ctx.location) || 'Unknown area',
     risk: r ? LEVEL[r.key] || 1 : 1, prob: r ? Math.round(r.index) : 0, fwi: r ? Math.round(r.index) : 0, conf: 0,
     metric: picked ? '—' : `${c.frp.toFixed(1)} MW`,
     evidence: picked ? 'No detection here' : `${c.count} detection${c.count === 1 ? '' : 's'}`,
-    window: picked ? 'Weather for the spot you clicked' : `Last detected ${c.last} UTC`,
+    window: picked ? 'No fires detected: weather at the middle of CA' : `Last detected ${c.last} UTC`,
     latlng: c.latlng, ctx, reasons: ctx.reasons || [], picked: !!picked,
   }
 }
@@ -82,6 +77,11 @@ function seriesOf(it) {                                           // hour-by-hou
 export const measFor = (D, sel) => (D.live ? measOf(D.items[sel]) : D.meas)
 export const seriesFor = (D, sel) => (D.live ? seriesOf(D.items[sel]) : D.series)
 
+// the sentence for one fire, shown in the right box above its details
+export function selHeadline(D, it) {
+  return D.modelReady ? `Highest chance of fire tomorrow: ${it.prob}% near ${it.name}` : `Fire weather is ${RISK[it.risk].toLowerCase()} near ${it.name}`
+}
+
 function liveData(items, total, modelStatus) {
   const top = items.reduce((a, b) => (b.prob > a.prob ? b : a), items[0])
   const anyFire = items.some((x) => !x.picked)
@@ -92,6 +92,7 @@ function liveData(items, total, modelStatus) {
     model: m ? "SkyAlert spread model, on today's FIRMS fires and GRIDMET weather" : 'Fosberg fire-weather index, from Open-Meteo weather',
     headline: !anyFire ? 'No fires detected in CA in the last 2 days'
       : m ? `Highest chance of fire tomorrow: ${top.prob}% near ${top.name}` : `Fire weather is ${RISK[top.risk].toLowerCase()} near ${top.name}`,
+    topName: anyFire ? top.name : null,   // the left box shows just this place; the sentence moves to the right box (selHeadline)
     risk: top.risk, prob: top.prob,
     probLabel: m ? 'Chance of fire tomorrow within 2 km, from the SkyAlert spread model' : 'Fire-weather index (0–100), worst hour in the next 24 h',
     regionLabel: m ? 'highest chance' : 'highest index',
@@ -100,14 +101,9 @@ function liveData(items, total, modelStatus) {
   }
 }
 
-export async function buildLive({ fires, bounds, pick, modelStatus, withModel }) {
+export async function buildLive({ fires, bounds, modelStatus, withModel }) {
   const { clusters, total } = clustersIn(fires, bounds)
   let items = await Promise.all(clusters.map(async (c) => toItem(c, await getFireContext(...c.latlng))))
-  if (pick) {                                                     // the spot or fire dot you clicked joins the list
-    const it = toItem(pick, await getFireContext(...pick.latlng), !pick.fire)
-    it.clicked = true
-    items = items.filter((x) => kmBetween(x.latlng, it.latlng) >= CLUSTER_KM).concat(it)
-  }
   if (!items.length) { const c = L.latLngBounds(bounds).getCenter(); items = [toItem({ latlng: [c.lat, c.lng] }, await getFireContext(c.lat, c.lng), true)] }
   if (withModel && modelStatus.ready) await Promise.all(items.map(applyForecast))
   items.sort((a, b) => b.prob - a.prob)                           // highest first

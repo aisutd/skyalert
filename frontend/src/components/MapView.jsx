@@ -1,9 +1,9 @@
 // The map view (concept 05): full-bleed map with three floating panels. Fire has a second mode, the model on a past fire.
 import { forwardRef } from 'react'
 import { MODEL, detectorTotals } from '../lib/model.js'
-import { measFor, seriesFor } from '../lib/live.js'
+import { measFor, seriesFor, selHeadline } from '../lib/live.js'
 import { nf, pc0 } from '../lib/format.js'
-import { AnimText, Attr, Brand, Chart, ConfRing, DataBadge, HazardToggle, Kind, Layers, Legend, Risk, ThemeButton } from './bits.jsx'
+import { AnimText, Attr, Brand, Chart, DataBadge, HazardToggle, Kind, Layers, Legend, Risk, ThemeButton } from './bits.jsx'
 import { Back, Bars, Collapse } from './icons.jsx'
 
 function TopRows({ s, act }) {                                    // brand row + toggle row, the same in both modes
@@ -104,12 +104,12 @@ function LivePanels({ s, act }) {
     <section className="fp fp1" data-anchor=".num" aria-label="Summary">
       <div className="pbg" aria-hidden="true" />
       <TopRows s={s} act={act} />
-      <h2 className="pc">{D.headline}</h2>
+      {D.live && D.topName ? <h2 data-k="selname">{D.topName}</h2> : <h2 className="pc">{D.headline}</h2>}
       <hr className="pc" />
       <div className="fp1-row">
         <div data-k="risk"><Risk l={D.risk} cls="lg" /></div>
         <div className="pr"><div className="num mv-num"><AnimText className="fn" value={D.prob} /><span className="pct">{D.unit || '%'}</span></div><span className="pr-l" data-k="plabel">{D.regionLabel}</span></div>
-        <div className="cf" data-k="conf">{D.live ? <><span className="cf-n">{nf(D.count)}</span><span className="cf-l">fire detections</span></> : <><ConfRing conf={D.conf} s={52} sw={5} /><span>model<br />confidence</span></>}</div>
+        <div className="cf" data-k="conf">{D.live ? <><span className="cf-n">{nf(D.count)}</span><span className="cf-l">fire detections</span></> : <><span className="cf-n">{D.conf}<span className="cf-u">%</span></span><span className="cf-l">model confidence</span></>}</div>
       </div>
       <hr className="pc" />
       <div data-k="layers"><Layers D={D} layers={s.layers} onLayer={act.setLayer} /></div>
@@ -117,7 +117,7 @@ function LivePanels({ s, act }) {
     <section className="fp fp2" data-anchor=".selp-name" aria-label="Selected cell">
       <div className="pbg" aria-hidden="true" />
       <div className="selp-top pc"><Kind D={D} it={it} /><AnimText className="selp-id" value={it.id} /></div>
-      <h3 className="selp-name" data-k="selname">{it.name}</h3>
+      {D.live ? <h3 className="selp-name selp-head pc">{selHeadline(D, it)}</h3> : <h3 className="selp-name" data-k="selname">{it.name}</h3>}
       <div className="pc"><Risk l={it.risk} /></div>
       <dl className="selp-dl pc">
         {D.live ? <>

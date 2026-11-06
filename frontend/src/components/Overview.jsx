@@ -1,6 +1,6 @@
 // The overview (concept 07). data-k marks a piece that also exists in the map view and flies there; .pc marks a piece that only fades.
 import { forwardRef, useLayoutEffect, useRef } from 'react'
-import { RISK } from '../lib/format.js'
+import { RISK, nf } from '../lib/format.js'
 import { measFor, seriesFor } from '../lib/live.js'
 import { AnimText, Attr, Brand, Chart, DataBadge, HazardToggle, Kind, Layers, Legend, Risk, ThemeButton, nowPct } from './bits.jsx'
 import { Bars, Expand } from './icons.jsx'
@@ -35,7 +35,7 @@ const Overview = forwardRef(function Overview({ s, act }, ref) {
         <p className="ov-cap" data-k="plabel">{D.probLabel}</p>
         <div className="ov-row">
           <div data-k="risk"><Risk l={it.risk} cls="xl" /></div>
-          <p className="ov-conf" data-k="conf">{D.live ? D.model : <>Model confidence {it.conf}%<br />{D.model}</>}</p>
+          <p className="ov-conf" data-k="conf">{D.live ? <><b className="ov-cnt">{nf(D.count)}</b> fire detections</> : <>Model confidence {it.conf}%<br />{D.model}</>}</p>
         </div>
         <button type="button" className="cta" data-k="cta" data-act="focus" onClick={act.focusMap}>Focus on the map <Expand /></button>
         {hz === 'fire'
