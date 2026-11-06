@@ -31,7 +31,7 @@ def get_data():
 app = FastAPI(title="SkyAlert")
 
 
-# OUR API: /api/summary. Feeds the three stat cards at the top (detections, region, dates). Called by the React app (StatCards.jsx)
+# OUR API: /api/summary. Detection count, region and dates. Not used by the React app right now (its stat cards were replaced)
 @app.get("/api/summary")
 def summary():
     """Numbers shown in the dashboard's stat cards."""
@@ -60,14 +60,14 @@ TABLE_COLUMNS = [
 ]
 
 
-# OUR API: /api/fires. Every fire detection as JSON. Feeds the map's dots and heatmap, the popup and the Analytics table
+# OUR API: /api/fires. Every fire detection as JSON. Feeds the map's fire dots and the fire list (frontend/src/lib/live.js)
 @app.get("/api/fires")
 def fires():
     """Every fire detection, one object per row."""
     df = get_data()["df"]
     # The row number becomes an "id" so React can tell rows apart
     table = df[TABLE_COLUMNS].rename_axis("id").reset_index()
-    # Ready-to-show values, so the popup and the Analytics table don't each work them out
+    # Ready-to-show values, so the frontend doesn't have to work them out
     table["confidence_label"] = table["confidence"].map(CONFIDENCE_LABELS).fillna(table["confidence"])
     hhmm = table["acq_time"].astype(int).astype(str).str.zfill(4)  # FIRMS acq_time: 815 -> "0815"
     table["acq_time_utc"] = hhmm.str[:2] + ":" + hhmm.str[2:]
@@ -75,10 +75,10 @@ def fires():
     return Response(table.to_json(orient="records"), media_type="application/json")
 
 
-# OUR API: /api/fire-context?lat=&lon=. Feeds the popup: place name (Nominatim), weather (Open-Meteo) and the risk level. Called when a fire dot is clicked
+# OUR API: /api/fire-context?lat=&lon=. Feeds each fire in the list (and any spot clicked on the map): place name (Nominatim), weather (Open-Meteo) and the risk level. Called once per fire, cached
 @app.get("/api/fire-context")
 def fire_context(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, le=180)):
-    """Place name, weather and fire-weather risk for one spot, for the map's popup."""
+    """Place name, weather and fire-weather risk for one spot, for the fire list and weather panel."""
     return get_fire_context(lat, lon)
 
 

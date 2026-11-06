@@ -7,7 +7,7 @@ SkyAlert is a computer vision system for detecting wildfires and floods from sat
 ## Technologies
 
 - **Backend:** Python, FastAPI, pandas
-- **Frontend:** the live HTML prototype (plain JavaScript + Leaflet) and the React + React Leaflet dashboard
+- **Frontend:** React + React Leaflet (the UI first built as the HTML prototype in `prototype/`)
 - **Models:** PyTorch U-Nets, trained on Kaggle GPUs
 - **Live data:** NASA FIRMS (VIIRS NOAA-20), Open-Meteo, GRIDMET, OpenStreetMap Nominatim, Esri map tiles
 - **Training data:** Landsat-8 Active Fire and Next Day Wildfire Spread (flood: Sen1Floods11 planned)
@@ -62,8 +62,8 @@ The page has two views. The **overview** shows the riskiest fire in California a
 
 SkyAlert has two parts that run at the same time:
 
-- **Backend** (Python, data only): `backend/firms_client.py` fetches fire detections from NASA FIRMS, `backend/data_cleaning.py` cleans them, `main.py` chains the two, `backend/fire_context.py` gets the weather and place name for the fire popup, `backend/spread_forecast.py` runs the spread model on live inputs, and `backend/dashboard.py` (FastAPI) serves it all as JSON on port 8000. It also serves the live prototype at `/prototype/`.
-- **Frontend** (React, all the UI): `frontend/` draws the dashboard on port 5173: stat cards, the fire map with a popup and heatmap, and the Analytics table. It gets every piece of data from the backend through `frontend/src/lib/api.js`.
+- **Backend** (Python, data only): `backend/firms_client.py` fetches fire detections from NASA FIRMS, `backend/data_cleaning.py` cleans them, `main.py` chains the two, `backend/fire_context.py` gets the weather and place name for each fire, `backend/spread_forecast.py` runs the spread model on live inputs, and `backend/dashboard.py` (FastAPI) serves it all as JSON on port 8000. It also serves the live prototype at `/prototype/`.
+- **Frontend** (React, all the UI): `frontend/` runs on port 5173. It opens on the overview (today's top fire, its fire-weather index and weather); "Focus on the map" morphs into the full map view with the fire list, weather panel and the model on a past fire. Flood shows sample data until there's a flood model. Every backend call is in `frontend/src/lib/api.js`.
 
 ### 1. Install the tools (once per computer)
 
@@ -245,7 +245,8 @@ main.py                       Fetch and clean FIRMS fires without the dashboard
 backend/                      FIRMS client, cleaning, fire context, spread forecast, FastAPI dashboard API
 prototype/index.html          Live single-page prototype, served at /prototype/
 prototype/model_results/      Detector and spread-model images used by the prototype
-frontend/                     React dashboard
+frontend/                     React app: src/App.jsx (state + overview ⇄ map morph), src/components/, src/lib/ (API, live data, sample data)
+frontend/public/model_results/ Detector and spread-model images used by the React app
 APIS.md                       Every API the project calls and exposes
 docs/integration.md           How fetch, cleaning, map, and dashboard fit together
 notebooks/fires.ipynb         FIRMS data exploration
