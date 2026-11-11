@@ -1,11 +1,12 @@
 """Show the trained spread model on test fires: today, the forecast, and tomorrow.
 
 Uses the test file in data/ndws, the weights and input stats downloaded from
-Kaggle into data/training, and the reader and model code from
-train_spread.ipynb. Writes the figure to docs/figures and the per-tile table
-to data/demos/spread.
+Kaggle into data/training, the TFRecord reader from train_spread.ipynb, and the
+model and input scaling from backend/spread_model.py. Writes the figure to
+docs/figures and the per-tile table to data/demos/spread.
 """
 
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -15,56 +16,33 @@ import matplotlib.pyplot as plt
 import nbformat
 import numpy as np
 import pandas as pd
-import torch
 from matplotlib.colors import ListedColormap
 
 REPO = Path(__file__).resolve().parents[1]
-TRAINING = REPO / "data" / "training"
+sys.path.insert(0, str(REPO))
+from backend.spread_model import INPUT_FEATURES, THRESHOLD, predict  # noqa: E402
+
 FIGURES = REPO / "docs" / "figures"
 OUTPUT = REPO / "data" / "demos" / "spread"
-THRESHOLD = 0.621  # chosen on val by the Kaggle run, see skyalert-fire-spread-unet.log
 MIN_TOMORROW_KM2 = 30
 
 
-def notebook_code():
+def notebook_reader():
+    """The TFRecord reader from train_spread.ipynb, without running the rest of the notebook."""
     notebook = nbformat.read(REPO / "notebooks" / "train_spread.ipynb", as_version=4)
     cells = {cell.get("id"): cell.source for cell in notebook.cells}
-    namespace = {"torch": torch}
-    exec(cells["b2e0d003"].replace('print("Running on"', "#"), namespace)
-    namespace["DATA_ROOT"] = namespace["LOCAL_DATA"]
+    namespace = {}
+    exec(cells["b2e0d003"].split("ON_KAGGLE = ")[0], namespace)
+    namespace["DATA_ROOT"] = REPO / "data" / "ndws"
     exec(cells["b2e0d007"].split("data, rows = {}, []")[0], namespace)
-    exec(cells["b2e0d020"].split("parameters =")[0], namespace)
     return namespace
 
 
-def normalize(inputs, features, valid_ranges, stats):
-    inputs = inputs.copy()
-    for name, (low, high) in valid_ranges.items():
-        plane = inputs[:, features.index(name)]
-        plane[(plane < low) | (plane > high)] = np.nan
-    for channel, name in enumerate(features):
-        low, high, mean, std = stats.loc[name, ["low", "high", "mean", "std"]]
-        plane = inputs[:, channel]
-        np.clip(plane, low, high, out=plane)
-        plane -= mean
-        plane /= std
-        plane[np.isnan(plane)] = 0.0
-    return inputs
-
-
 def main():
-    code = notebook_code()
-    features = code["INPUT_FEATURES"]
-    inputs, labels, _ = code["load_split"]("test")
-    stats = pd.read_csv(TRAINING / "spread_feature_stats.csv", index_col="feature")
-    model = code["UNet"](len(features))
-    model.load_state_dict(torch.load(TRAINING / "spread_unet.pt", map_location="cpu"))
-    model.eval()
-    with torch.no_grad():
-        scaled = torch.from_numpy(normalize(inputs, features, code["VALID_RANGES"], stats))
-        probability = torch.sigmoid(model(scaled)).numpy()[:, 0]
+    inputs, labels, _ = notebook_reader()["load_split"]("test")
+    probability = predict(inputs)
 
-    today = inputs[:, features.index("PrevFireMask")]
+    today = inputs[:, INPUT_FEATURES.index("PrevFireMask")]
     valid = labels != -1
     actual = (labels == 1) & valid
     predicted = (probability > THRESHOLD) & valid
