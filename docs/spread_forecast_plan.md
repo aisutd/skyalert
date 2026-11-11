@@ -26,12 +26,22 @@ live, lagged, or filled, and the model's test scores are shown next to the forec
 | 0 | Dashboard uses NOAA-20 + NOAA-21; cleaning handles missing FRP | Done, `dc58603` |
 | 1 | `backend/spread_model.py`, parity tests, demo uses it | Done, `bc8da3a` |
 | 2 | Input builder: grid, terrain, gridMET, FIRMS fires, assembly | Done |
-| 2b | Reconstruction check: rebuild located training tiles channel by channel | Not started |
-| 3 | `demos/backtest_spread.py`: score live-style inputs on past fires | Not started |
+| 2b | Reconstruction check: rebuild located training tiles channel by channel | Paused 2026-11-11: draft `demos/reconstruct_spread_tiles.py` (uncommitted, unverified) |
+| 3 | `demos/backtest_spread.py`: score live-style inputs on past fires | Paused 2026-11-11: draft script (uncommitted, unverified), no results yet |
+| Review | Independent correctness review of the step 2 code | Paused before reporting; rerun |
 | Gate | Show backtest numbers to the team | |
 | 4 | `GET /api/spread-forecast` | After the gate |
 | 5 | Map overlay, popup button, legend | After the gate |
 | 6 | README, APIS.md, credits | After the gate |
+
+## Resume here
+
+Paused on 2026-11-11 so the work could move. To continue:
+1. Rerun the independent review of the step 2 code (`ffaf108`) and fix anything it confirms.
+2. Finish and run `demos/reconstruct_spread_tiles.py` (step 2b). The draft is uncommitted; check it
+   before trusting it. Caches are in `data/cache/reconstruction/`.
+3. Finish and run `demos/backtest_spread.py` (step 3), quick mode first. Caches are in `data/cache/backtest/`.
+4. Stop at the gate and show the backtest numbers before steps 4 to 6.
 
 ## How the training tiles were made
 
