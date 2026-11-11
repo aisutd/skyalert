@@ -5,7 +5,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import Response
 
 from backend.fire_context import get_fire_context
-from main import CONFIDENCE_LABELS, DAY_RANGE, FIRMS_SOURCE, REGION_NAME, US_BOUNDS, fetch_fires
+from main import CONFIDENCE_LABELS, DAY_RANGE, FIRMS_SOURCES, REGION_NAME, US_BOUNDS, fetch_fires
 
 # FIRMS only updates every few hours, so reuse the data for a while instead of
 # downloading it again on every page load
@@ -43,7 +43,7 @@ def summary():
             "start": df["acq_date"].min() if len(df) else None,
             "end": df["acq_date"].max() if len(df) else None,
         },
-        "source": FIRMS_SOURCE,
+        "sources": list(FIRMS_SOURCES),
         "day_range": DAY_RANGE,
         "fetched_at": data["fetched_at"],
     }

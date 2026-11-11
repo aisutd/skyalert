@@ -177,7 +177,7 @@ export default function FirePopup({ map, fire, safeTop, onClose, onOpenAnalysis 
         <div className="popup-item">
           <div className="popup-section-title">Satellite</div>
           <div className="popup-stats">
-            <Stat label="FRP" value={`${fire.frp.toFixed(1)} MW`} />
+            <Stat label="FRP" value={fire.frp == null ? '—' : `${fire.frp.toFixed(1)} MW`} />
             <Stat label="Confidence" value={fire.confidence_label} accent />
             <Stat
               label="Seen"

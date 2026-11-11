@@ -41,10 +41,11 @@ function labelDot(layer, fire, dotToFire) {
   dotToFire.set(path, fire)
   path.setAttribute('tabindex', '0')
   path.setAttribute('role', 'button')
-  path.setAttribute('aria-label', `Fire detected ${fire.acq_date} ${fire.acq_time_utc} UTC, ${fire.frp} megawatts. Open details.`)
+  const power = fire.frp == null ? 'power unknown' : `${fire.frp} megawatts`
+  path.setAttribute('aria-label', `Fire detected ${fire.acq_date} ${fire.acq_time_utc} UTC, ${power}. Open details.`)
 }
 
-// One small red dot per detection. useMemo keeps ~1,800 markers from re-rendering
+// One small red dot per detection. useMemo keeps ~5,000 markers from re-rendering
 // when the popup opens or the theme changes.
 function FireDots({ fires, onSelect, dotToFire }) {
   return useMemo(
@@ -102,7 +103,7 @@ export default function FireMap({ fires, error, theme, safeTop, visible, onOpenA
   const [zoom, setZoom] = useState(ZOOM_START)
   const [soundOn, setSoundOn] = useState(loadSoundSetting)
   // Refs let select/close read the latest values without being re-created
-  // (re-creating them would re-render all ~1,800 dots)
+  // (re-creating them would re-render all ~5,000 dots)
   const selectedRef = useRef(null)
   const soundRef = useRef(soundOn)
   const dotToFire = useMemo(() => new WeakMap(), []) // <path> -> fire, for keyboard use

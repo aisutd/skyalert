@@ -33,7 +33,7 @@ def get_map_key():
     return key
 
 
-def build_url(map_key, area=US_BOUNDS, days=2, source="VIIRS_SNPP_NRT"):
+def build_url(map_key, area=US_BOUNDS, days=2, source="VIIRS_NOAA20_NRT"):
     """Build the FIRMS area API URL for a VIIRS request."""
     if source not in VIIRS_SOURCES:
         raise FirmsError(
@@ -44,7 +44,7 @@ def build_url(map_key, area=US_BOUNDS, days=2, source="VIIRS_SNPP_NRT"):
     return f"{FIRMS_AREA_URL}/{map_key}/{source}/{area}/{int(days)}"
 
 
-def fetch_viirs(area=US_BOUNDS, days=2, source="VIIRS_SNPP_NRT", timeout=60, map_key=None):
+def fetch_viirs(area=US_BOUNDS, days=2, source="VIIRS_NOAA20_NRT", timeout=60, map_key=None):
     """Fetch VIIRS detections for an area and return them as a DataFrame.
 
     area is "west,south,east,north" in degrees, or "world". days is 1 to 5.

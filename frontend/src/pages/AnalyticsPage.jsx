@@ -48,7 +48,7 @@ const COLUMNS = [
     hint: 'Fire Radiative Power: how much heat the fire gives off',
     numeric: true,
     sortValue: (f) => f.frp,
-    render: (f) => f.frp.toFixed(2),
+    render: (f) => (f.frp == null ? '—' : f.frp.toFixed(2)),
   },
   {
     key: 'bright_ti4',
@@ -56,7 +56,7 @@ const COLUMNS = [
     hint: 'Pixel temperature from the I-4 band, in Kelvin',
     numeric: true,
     sortValue: (f) => f.bright_ti4,
-    render: (f) => f.bright_ti4.toFixed(1),
+    render: (f) => (f.bright_ti4 == null ? '—' : f.bright_ti4.toFixed(1)),
   },
   {
     key: 'confidence',
@@ -134,6 +134,8 @@ export default function AnalyticsPage({ fires, error, focus, onClearFocus }) {
     return [...filtered].sort((a, b) => {
       const x = column.sortValue(a)
       const y = column.sortValue(b)
+      // Missing values (null) always go last, whichever way the column is sorted
+      if (x == null || y == null) return (x == null) - (y == null)
       return (x < y ? -1 : x > y ? 1 : 0) * flip
     })
   }, [baseFires, confidenceFilter, sort, columns])
@@ -164,7 +166,7 @@ export default function AnalyticsPage({ fires, error, focus, onClearFocus }) {
   // Numbers for the tiles: all detections, or just the region's when focused
   // (the confidence filter doesn't change them)
   const highCount = baseFires.filter((f) => f.confidence === 'h').length
-  const frpValues = baseFires.map((f) => f.frp)
+  const frpValues = baseFires.map((f) => f.frp).filter((v) => v != null)
   const maxFrp = frpValues.length ? Math.max(...frpValues) : 0
   const avgFrp = frpValues.length ? frpValues.reduce((sum, v) => sum + v, 0) / frpValues.length : 0
 
