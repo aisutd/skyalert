@@ -1,0 +1,7 @@
+huggingface_hub
+rasterio
+numpy
+matplotlib
+torch
+segmentation-models-pytorch
+ipykernel
