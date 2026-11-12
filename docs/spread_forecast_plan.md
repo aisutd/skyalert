@@ -27,12 +27,34 @@ live, lagged, or filled, and the model's test scores are shown next to the forec
 | 1 | `backend/spread_model.py`, parity tests, demo uses it | Done, `bc8da3a` |
 | 2 | Input builder: grid, terrain, gridMET, FIRMS fires, assembly | Done |
 | 2b | Reconstruction check: rebuild located training tiles channel by channel | Done: `docs/spread_reconstruction_report.md` |
-| 3 | `demos/backtest_spread.py`: score live-style inputs on past fires | Paused 2026-11-11: draft script (uncommitted, unverified), no results yet |
+| 3 | `demos/backtest_spread.py`: score live-style inputs on past fires | Done: `docs/spread_backtest_report.md` |
 | Review | Independent correctness review of the step 2 code | Done: 1 critical (weather node anchor), 1 major (fire layer on FIRMS failure), 3 minor; all fixed |
-| Gate | Show backtest numbers to the team | |
+| Gate | Show backtest numbers to the team | **Failed** 2026-11-12: model level with persistence. Steps 4 to 6 on hold pending a decision |
 | 4 | `GET /api/spread-forecast` | After the gate |
 | 5 | Map overlay, popup button, legend | After the gate |
 | 6 | README, APIS.md, credits | After the gate |
+
+## Gate result (2026-11-12): failed
+
+336 tiles centred on a day-t Terra fire, 168 fire-season days 2018–2024, all regions. Inputs built
+with `5bef496`, fire masks with `cb082c5`. Live setting (weather lag t−3..t−2, MODIS Terra fire):
+
+| Masks (inputs; labels) | Model IoU | Persistence IoU | Difference, 95% CI |
+|---|---|---|---|
+| footprint ×0.5; footprint ×0.5 (closest to training) | 0.141 | 0.150 | −0.009 [−0.030, 0.008] |
+| centre pixel; centre pixel | 0.075 | 0.073 | +0.002 [−0.013, 0.014] |
+
+The lead recomputed the centre-pixel row from the saved tiles and got the same numbers.
+- The model forecasts about 4 times more pixels than burn (precision 15%, recall 65%). Even at the
+  best threshold for these labels its IoU only reaches about 0.08 (centre-pixel labels).
+- Without weather the IoU rises (0.164) because the forecast shrinks, so the weather adds little.
+- Almost all the signal is in the West.
+- For scale, the model only beat persistence by 0.017 IoU on its own NDWS test split (0.200 vs 0.183),
+  and by 0.035 on the 19 reconstructed tiles. The backtest can't show an edge that small, and on
+  live-style tiles there isn't one.
+- Likely reasons the live setting is harder: tiles are centred on today's fire (180 of 336 had no
+  Terra fire the next day; NDWS tiles were centred on next-day fire), and the labels have no cloud
+  mask (NDWS left cloudy pixels out).
 
 ## Resume here
 
