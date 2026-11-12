@@ -96,7 +96,7 @@ def stub_firms(monkeypatch):
             raise answer
         return answer
 
-    monkeypatch.setattr(fp, "data_availability", lambda: AVAILABILITY.copy())
+    monkeypatch.setattr(fp, "data_availability", lambda refresh=False: AVAILABILITY.copy())
     monkeypatch.setattr(fp, "fetch_area", fake_fetch_area)
     return answers, calls
 
@@ -251,13 +251,31 @@ def test_fire_mask_zeros_when_nothing_found(stub_firms):
     assert info["reason"].startswith("no detections")
 
 
-def test_fire_mask_reports_errors_when_everything_fails(stub_firms):
+def test_fire_mask_raises_when_every_request_fails(stub_firms):
+    # Failing to reach FIRMS is not the same as "no fire today": it must not become a zero mask
     answers, _ = stub_firms
     answers["MODIS_SP"] = FirmsError("MODIS broke")
     answers["VIIRS_NOAA20_SP"] = FirmsError("VIIRS broke")
+    with pytest.raises(FirmsError, match="MODIS broke.*VIIRS broke"):
+        fp.fire_mask(TileGrid.around(*CENTER), DAY)
+
+
+def test_fire_mask_one_failure_and_no_detections_is_zero_with_reason(stub_firms):
+    answers, _ = stub_firms
+    answers["MODIS_SP"] = FirmsError("MODIS broke")
+    answers["VIIRS_NOAA20_SP"] = viirs_rows([])
     mask, info = fp.fire_mask(TileGrid.around(*CENTER), DAY)
-    assert mask.sum() == 0
-    assert "MODIS broke" in info["reason"] and "VIIRS broke" in info["reason"]
+    assert mask.sum() == 0 and "MODIS broke" in info["reason"]
+
+
+def test_sources_for_refreshes_stale_availability(monkeypatch):
+    # The cached ranges end yesterday; a refresh shows today's NRT data
+    stale = pd.DataFrame({"data_id": ["MODIS_NRT"], "min_date": [date(2026, 9, 1)], "max_date": [date(2026, 11, 11)]})
+    fresh = pd.DataFrame({"data_id": ["MODIS_NRT"], "min_date": [date(2026, 9, 1)], "max_date": [date(2026, 11, 12)]})
+    calls = []
+    monkeypatch.setattr(fp, "data_availability", lambda refresh=False: calls.append(refresh) or (fresh if refresh else stale))
+    assert fp.sources_for(date(2026, 11, 12), "MODIS") == ["MODIS_NRT"]
+    assert calls == [False, True]
 
 
 def test_fire_mask_prefer_viirs(stub_firms):
@@ -421,3 +439,18 @@ def test_network_viirs_archive():
     points = fp.fire_points(36, -123, 41, -118, DAY, "VIIRS")
     assert len(points) > 1000
     assert set(points["satellite"]) == {"N20"} and set(points["source"]) == {"VIIRS_NOAA20_SP"}
+
+
+def test_key_is_redacted_even_when_it_straddles_the_message_cut(monkeypatch):
+    key = "abcdef0123456789abcdef0123456789"
+    body = "x" * 187 + key + " is not a valid MAP_KEY"
+
+    class Answer:
+        status_code = 400
+        text = body
+
+    monkeypatch.setattr(firms_client.requests, "get", lambda url, timeout: Answer())
+    with pytest.raises(FirmsError) as caught:
+        firms_client.fetch_area("MODIS_NRT", "-125,24,-66,50", map_key=key)
+    message = str(caught.value)
+    assert key[:8] not in message and key[-8:] not in message and "abcdef0123456" not in message

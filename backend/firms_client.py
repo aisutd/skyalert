@@ -107,7 +107,8 @@ def _get_csv(url, map_key, timeout, empty_columns, expect_header="latitude"):
         raise FirmsError(f"The request to FIRMS failed ({type(error).__name__}).") from None
 
     text = response.text.strip()
-    message = text[:200].replace(map_key, "<key>")
+    # Redact before truncating, so a key that straddles the cut can't leak partly
+    message = text.replace(map_key, "<key>")[:200]
     if response.status_code != 200:
         raise FirmsError(f"FIRMS returned HTTP {response.status_code}: {message}")
     if not text:
@@ -153,7 +154,7 @@ def fetch_area(source, area=US_BOUNDS, days=1, date=None, timeout=60, map_key=No
     return _get_csv(url, map_key, timeout, empty_columns)
 
 
-def data_availability(map_key=None, timeout=30):
+def data_availability(map_key=None, timeout=30, refresh=False):
     """Date range of every FIRMS source, as a DataFrame with data_id, min_date, max_date (dates).
 
     FIRMS answers from /api/data_availability/csv/{KEY}/all. Kept for 6 hours, since the
@@ -161,7 +162,8 @@ def data_availability(map_key=None, timeout=30):
     """
     with _availability_lock:
         cached = _availability["table"]
-        if cached is not None and time.time() - _availability["fetched_at"] < AVAILABILITY_CACHE_SECONDS:
+        fresh = time.time() - _availability["fetched_at"] < AVAILABILITY_CACHE_SECONDS
+        if cached is not None and fresh and not refresh:
             return cached.copy()
         if map_key is None:
             map_key = get_map_key()

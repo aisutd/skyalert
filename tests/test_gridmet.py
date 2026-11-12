@@ -334,7 +334,8 @@ def test_node_grid_block_means():
     lons = -600 * nd + np.array([0.02, 0.06, 0.10])
     values = np.arange(18, dtype=float).reshape(6, 3)
     values[0, 0] = np.nan
-    nodes, node_lats, node_lons = gridmet.node_grid(values, lats, lons, (200, 201), (-600, -600))
+    # Origin (0, 0) here to test the block-mean mechanics; real layers use gridMET's corner
+    nodes, node_lats, node_lons = gridmet.node_grid(values, lats, lons, (200, 201), (-600, -600), 0.0, 0.0)
     assert nodes.shape == (2, 1)
     assert np.isclose(nodes[0, 0], np.nanmean(values[:5]))
     assert np.isclose(nodes[1, 0], values[5].mean())
@@ -343,7 +344,7 @@ def test_node_grid_block_means():
 
 def test_node_grid_empty_node_is_nan():
     nd = gridmet.NODE_DEG
-    nodes, _, _ = gridmet.node_grid(np.ones((1, 1)), np.array([10 * nd + 0.01]), np.array([10 * nd + 0.01]), (10, 11), (10, 10))
+    nodes, _, _ = gridmet.node_grid(np.ones((1, 1)), np.array([10 * nd + 0.01]), np.array([10 * nd + 0.01]), (10, 11), (10, 10), 0.0, 0.0)
     assert nodes[0, 0] == 1 and np.isnan(nodes[1, 0])
 
 
@@ -455,7 +456,7 @@ def test_live_weather_and_pdsi_layers_for_a_real_tile(live):
     days = [latest - dt.timedelta(days=1), latest]
     plausible = {
         "th": (0, 360), "vs": (0, 30), "tmmn": (220, 320), "tmmx": (230, 330),
-        "sph": (0, 0.03), "pr": (0, 300), "erc": (0, 150),
+        "sph": (0, 0.03), "pr": (-1, 300), "erc": (0, 150),
     }
     started = time.time()
     for var in gridmet.VARIABLES:

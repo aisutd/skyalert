@@ -79,3 +79,15 @@ def test_failed_layer_is_missing_not_invented(stub_layers, monkeypatch):
     assert "server down" in built.layers["tmmx"]["error"]
     with pytest.raises(spread_inputs.SpreadInputError):
         spread_inputs.build_inputs(38.5, -120.5, DAY, strict=True)
+
+
+def test_fire_layer_missing_when_firms_unreachable(stub_layers, monkeypatch):
+    def unreachable(grid, day, **kwargs):
+        raise spread_inputs.fire_points.FirmsError("Could not get today's fire detections.")
+
+    monkeypatch.setattr(spread_inputs.fire_points, "fire_mask", unreachable)
+    built = spread_inputs.build_inputs(38.5, -120.5, DAY)
+    assert built.layers["PrevFireMask"]["status"] == "missing"
+    assert np.isnan(built.inputs[INPUT_FEATURES.index("PrevFireMask")]).all()
+    with pytest.raises(spread_inputs.SpreadInputError):
+        spread_inputs.build_inputs(38.5, -120.5, DAY, strict=True)

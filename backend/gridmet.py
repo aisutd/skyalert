@@ -19,6 +19,7 @@ Facts this code relies on (verified against live responses on 2026-11-11):
 """
 
 import datetime as dt
+import os
 import re
 import threading
 import time
@@ -46,6 +47,15 @@ EPOCH = dt.date(1900, 1, 1)  # gridMET "day" is days since this date
 # gridMET onto a 20 km grid (`reproject(...atScale(20000))`) before bicubic resampling, which on
 # the WGS84 degree grid means square cells of this many degrees, anchored at (0°, 0°).
 NODE_DEG = 20000 / 111319.49079327357
+# The 20 km node grid keeps gridMET's own grid origin: the export reprojected with
+# GRIDMET_proj.atScale(20000), which changes the scale but not the corner. Node edges therefore
+# sit at whole multiples of NODE_DEG from gridMET's outer corner (the north edge of its first row,
+# 49.4 + 1/48, and the west edge of its first column, -124.766666... - 1/48), not from (0°, 0°).
+# Evidence: the bicubic "knots" in the stored training weather fall at global pixel phase 11.0
+# (lat) and about 18.5 (lon) mod 20, which this origin reproduces and a (0°, 0°) origin does not
+# (docs/spread_forecast_plan.md, "Weather node grid").
+NODE_ORIGIN_LAT = 49.4 + 1 / 48
+NODE_ORIGIN_LON = -124.76666663333334 - 1 / 48
 
 TIMEOUT = 30  # seconds per request
 RETRIES = 2  # extra tries per server for timeouts, connection errors and 5xx answers
@@ -193,10 +203,28 @@ def _file_path(var, year):
     return f"{var}/{var}_{year}.nc"
 
 
+# gridMET revises recent days ("early" and "provisional" slices) for about two months before they
+# become permanent (on 2026-11-11 the last permanent slice was day 253, ~2 months back), so a
+# year's file is only treated as final this long after the year ends.
+FINAL_AFTER_DAYS = 120
+
+
 def _disk_cache_allowed(path):
-    """Only past years' files are cached on disk: recent days are still being revised."""
+    """Only years whose data can no longer change are cached on disk."""
     match = re.search(r"_(\d{4})\.nc$", path)
-    return CACHE_DIR is not None and match is not None and int(match.group(1)) < dt.datetime.now(dt.timezone.utc).year
+    if CACHE_DIR is None or match is None:
+        return False
+    year_end = dt.date(int(match.group(1)), 12, 31)
+    return dt.datetime.now(dt.timezone.utc).date() > year_end + dt.timedelta(days=FINAL_AFTER_DAYS)
+
+
+def _save_npz(path, **arrays):
+    """Write an .npz atomically, so a reader in another thread never sees a half-written file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.part")
+    with open(partial, "wb") as handle:
+        np.savez(handle, **arrays)
+    os.replace(partial, path)
 
 
 def _meta(path):
@@ -236,8 +264,7 @@ def _meta(path):
             raise GridmetError(f"{path}: expected latitude descending and longitude ascending")
         meta = _FileMeta(path, name, scale, offset, fills, lats, lons, tuple(_to_date(value) for value in days))
         if disk is not None:
-            disk.parent.mkdir(parents=True, exist_ok=True)
-            np.savez(
+            _save_npz(
                 disk, name=name, scale=scale, offset=offset, fills=np.array(fills, dtype=float),
                 lats=lats, lons=lons, days=days,
             )
@@ -270,8 +297,7 @@ def _raw_subset(meta, d0, d1, i0, i1, j0, j1):
         if raw.shape != expected:
             raise GridmetError(f"gridMET answer for {meta.path} has shape {raw.shape}, expected {expected}")
         if disk is not None:
-            disk.parent.mkdir(parents=True, exist_ok=True)
-            np.savez(disk, raw=raw)
+            _save_npz(disk, raw=raw)
 
     with _cache_lock:
         _data_cache[key] = (time.time(), raw)
@@ -425,24 +451,25 @@ def bicubic(values, lats, lons, out_lats, out_lons):
     return result.reshape(shape)
 
 
-def _node_range(low, high):
-    """Node indices whose 4-tap support covers every point in [low, high] (node k centred at (k+0.5)*NODE_DEG)."""
-    first = int(np.floor(low / NODE_DEG - 0.5)) - 1
-    last = int(np.floor(high / NODE_DEG - 0.5)) + 2
+def _node_range(low, high, origin):
+    """Node indices whose 4-tap support covers every point in [low, high] (node k centred at origin + (k+0.5)*NODE_DEG)."""
+    first = int(np.floor((low - origin) / NODE_DEG - 0.5)) - 1
+    last = int(np.floor((high - origin) / NODE_DEG - 0.5)) + 2
     return first, last
 
 
-def node_grid(values, lats, lons, lat_nodes, lon_nodes):
+def node_grid(values, lats, lons, lat_nodes, lon_nodes, origin_lat=NODE_ORIGIN_LAT, origin_lon=NODE_ORIGIN_LON):
     """Block means of a gridMET field on the 20 km node grid.
 
     values[nlat, nlon] with lats/lons ascending (cell centres). lat_nodes and lon_nodes are
-    inclusive (first, last) node index ranges; node k covers [k*NODE_DEG, (k+1)*NODE_DEG).
+    inclusive (first, last) node index ranges; along each axis node k covers
+    [origin + k*NODE_DEG, origin + (k+1)*NODE_DEG).
     Each node is the mean of the valid cells whose centres fall inside it (NaN if none).
     Returns (node values, node centre lats, node centre lons), all ascending.
     """
     values = np.asarray(values, dtype=np.float64)
-    lat_index = np.floor(np.asarray(lats) / NODE_DEG).astype(np.int64) - lat_nodes[0]
-    lon_index = np.floor(np.asarray(lons) / NODE_DEG).astype(np.int64) - lon_nodes[0]
+    lat_index = np.floor((np.asarray(lats) - origin_lat) / NODE_DEG).astype(np.int64) - lat_nodes[0]
+    lon_index = np.floor((np.asarray(lons) - origin_lon) / NODE_DEG).astype(np.int64) - lon_nodes[0]
     n_lat = lat_nodes[1] - lat_nodes[0] + 1
     n_lon = lon_nodes[1] - lon_nodes[0] + 1
     rows, cols = np.meshgrid(lat_index, lon_index, indexing="ij")
@@ -453,8 +480,8 @@ def node_grid(values, lats, lons, lat_nodes, lon_nodes):
     np.add.at(counts, (rows[keep], cols[keep]), 1)
     with np.errstate(invalid="ignore", divide="ignore"):
         nodes = np.where(counts > 0, sums / counts, np.nan)
-    node_lats = (np.arange(lat_nodes[0], lat_nodes[1] + 1) + 0.5) * NODE_DEG
-    node_lons = (np.arange(lon_nodes[0], lon_nodes[1] + 1) + 0.5) * NODE_DEG
+    node_lats = origin_lat + (np.arange(lat_nodes[0], lat_nodes[1] + 1) + 0.5) * NODE_DEG
+    node_lons = origin_lon + (np.arange(lon_nodes[0], lon_nodes[1] + 1) + 0.5) * NODE_DEG
     return nodes, node_lats, node_lons
 
 
@@ -480,11 +507,13 @@ def weather_layer(grid, var, days):
         raise GridmetError(f"Unknown gridMET weather variable {var!r}. Use one of {VARIABLES}")
     days = sorted(set(days))
     pixel_lats, pixel_lons = grid.lats, grid.lons
-    lat_nodes = _node_range(pixel_lats.min(), pixel_lats.max())
-    lon_nodes = _node_range(pixel_lons.min(), pixel_lons.max())
+    lat_nodes = _node_range(pixel_lats.min(), pixel_lats.max(), NODE_ORIGIN_LAT)
+    lon_nodes = _node_range(pixel_lons.min(), pixel_lons.max(), NODE_ORIGIN_LON)
     # Fetch exactly the cells that make up the needed nodes (fetch adds one cell of margin)
-    south, north = lat_nodes[0] * NODE_DEG, (lat_nodes[1] + 1) * NODE_DEG
-    west, east = lon_nodes[0] * NODE_DEG, (lon_nodes[1] + 1) * NODE_DEG
+    south = NODE_ORIGIN_LAT + lat_nodes[0] * NODE_DEG
+    north = NODE_ORIGIN_LAT + (lat_nodes[1] + 1) * NODE_DEG
+    west = NODE_ORIGIN_LON + lon_nodes[0] * NODE_DEG
+    east = NODE_ORIGIN_LON + (lon_nodes[1] + 1) * NODE_DEG
     values, lats, lons = fetch(var, days, south, west, north, east)
     nodes, node_lats, node_lons = node_grid(_mean_over_days(values), lats, lons, lat_nodes, lon_nodes)
     layer = bicubic(nodes, node_lats, node_lons, pixel_lats, pixel_lons).astype(np.float32)

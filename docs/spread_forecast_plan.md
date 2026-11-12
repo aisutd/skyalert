@@ -28,7 +28,7 @@ live, lagged, or filled, and the model's test scores are shown next to the forec
 | 2 | Input builder: grid, terrain, gridMET, FIRMS fires, assembly | Done |
 | 2b | Reconstruction check: rebuild located training tiles channel by channel | Paused 2026-11-11: draft `demos/reconstruct_spread_tiles.py` (uncommitted, unverified) |
 | 3 | `demos/backtest_spread.py`: score live-style inputs on past fires | Paused 2026-11-11: draft script (uncommitted, unverified), no results yet |
-| Review | Independent correctness review of the step 2 code | Paused before reporting; rerun |
+| Review | Independent correctness review of the step 2 code | Done: 1 critical (weather node anchor), 1 major (fire layer on FIRMS failure), 3 minor; all fixed |
 | Gate | Show backtest numbers to the team | |
 | 4 | `GET /api/spread-forecast` | After the gate |
 | 5 | Map overlay, popup button, legend | After the gate |
@@ -88,7 +88,7 @@ Verified by probing on 2026-11-11 (`research/data_sources.md` in the scratchpad)
 | Channel | Live source | Our recipe | Status shown |
 |---|---|---|---|
 | elevation | AWS Terrarium tiles, zoom 10 (about 120 m pixels at 38° N) | Mean of the zoom-10 pixels whose centres fall in each tile pixel; negative values → 0 (SRTM has no ocean values; Death Valley's −86 m becoming 0 doesn't matter after scaling) | static |
-| th, vs, tmmn, tmmx, sph, pr, erc | gridMET over THREDDS OPeNDAP, yearly files `{var}_{YYYY}.nc` | Fetch the chosen days, unpack, average the days per gridMET cell, block-mean onto the global 20 km node grid, bicubic to the tile's pixel centres | lagged (gridMET runs about 2 days behind) |
+| th, vs, tmmn, tmmx, sph, pr, erc | gridMET over THREDDS OPeNDAP, yearly files `{var}_{YYYY}.nc` | Fetch the chosen days, unpack, average the days per gridMET cell, block-mean onto the 20 km node grid anchored at gridMET's corner, bicubic to the tile's pixel centres | lagged (gridMET runs about 2 days behind) |
 | pdsi | gridMET `MET/pdsi/pdsi.nc` | Latest pentad on or before day t, bicubic from the 1/24° grid to the pixel centres | lagged |
 | NDVI | none | NaN | filled |
 | population | none | NaN | filled |
@@ -180,6 +180,21 @@ no other module flips or transposes anything.
 - `demos/backtest_spread.py` (step 3).
 - `tests/`: pytest. Network tests use `@pytest.mark.network` and run only with `--network`.
 
+### Weather node grid
+
+The export reprojected gridMET with `GRIDMET_proj.atScale(20000)`, which changes the scale but
+keeps gridMET's origin. So node edges sit at whole multiples of `NODE_DEG = 20000 / 111319.49°`
+from gridMET's outer corner: the north edge of its first row (49.4 + 1/48) and the west edge of its
+first column (−124.7667 − 1/48), **not** from (0°, 0°).
+
+Evidence: bicubic leaves faint "knots" at node centres. In the stored training weather (three
+located tiles, five variables) they fall at global pixel phase 11.0 (lat) and about 18.5 (lon)
+mod 20. Running our node_grid + bicubic on random fields with each candidate origin and comparing
+the knot pattern (L1 distance, lat / lon): (0°, 0°) 1.03 / 1.99; Earth Engine's asset corner
+49.41667 0.67 / 0.03; gridMET file corner 49.42083 0.07 / 0.03. Locked in by
+`tests/test_spread_alignment.py::test_weather_node_grid_lines_up_with_training_knots`.
+Found by the independent review on 2026-11-11 (the first version used (0°, 0°)).
+
 ### Bicubic
 
 Separable cubic convolution (Keys, a = −0.5) on the regular source grid, evaluated at the tile's
@@ -218,6 +233,12 @@ forecast from stored vs rebuilt inputs. This settles:
 - which gridMET days the release used (t−1 and t, or one day earlier: the `lag` question)
 - whether the 20 km block mean + bicubic recipe reproduces the stored weather texture
 - how close FIRMS-based fire masks are to MOD14A1
+
+## Fire layer when FIRMS can't be reached
+
+If every FIRMS request fails, `fire_mask` raises instead of returning an empty mask: not knowing
+today's fire is different from "no fire today". `build_inputs` then marks PrevFireMask "missing"
+(strict mode raises). The API (step 4) must refuse to forecast without a fire layer.
 
 ## Open checks
 

@@ -228,3 +228,12 @@ def test_matches_open_meteo_points(real_tiles):
         print(f"cell [{row},{col}] ours {ours:.0f} m, Open-Meteo point {theirs:.0f} m, diff {ours - theirs:+.0f} m")
         # A 1 km mean against a 90 m point sample in the Sierra foothills: allow terrain spread
         assert abs(ours - theirs) <= 250
+
+
+def test_sea_depths_are_clamped_before_averaging(stub_tiles):
+    # Alternating source columns at -100 m (sea) and +100 m (land). SRTM stores the sea as 0, so each
+    # cell is 100 m times its share of land columns: 3/7 or 4/7 here (a cell spans an odd number of
+    # source columns). Clamping after averaging would give 0 to 14 m instead.
+    stub_tiles(lambda gx, gy: np.where(gx % 2 == 0, -100.0, 100.0))
+    out = terrain.elevation(TileGrid.around(38.5, -120.5))
+    assert out.min() > 40 and out.max() < 60

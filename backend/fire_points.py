@@ -8,6 +8,7 @@ the result says so. We can't see clouds, so there are no -1 (uncertain) pixels: 
 See docs/spread_forecast_plan.md, "How we rebuild each channel from live data".
 """
 
+import os
 import threading
 import time
 from datetime import date as Date
@@ -76,7 +77,17 @@ def sources_for(day, family="MODIS"):
     if family not in FAMILY_SOURCES:
         raise ValueError(f"family must be one of {FAMILIES}, got {family!r}")
     day = _as_date(day)
-    ranges = data_availability().set_index("data_id")
+    chosen = _covering(data_availability(), day, family)
+    if not chosen:
+        # The cached date ranges may predate a new UTC day: NRT max_date moves forward daily
+        chosen = _covering(data_availability(refresh=True), day, family)
+    if not chosen:
+        raise FirmsError(f"No FIRMS {family} source covers {day.isoformat()}.")
+    return chosen
+
+
+def _covering(availability, day, family):
+    ranges = availability.set_index("data_id")
     chosen = []
     for candidates in FAMILY_SOURCES[family]:
         for source in candidates:
@@ -85,8 +96,6 @@ def sources_for(day, family="MODIS"):
                 if pd.notna(first) and pd.notna(last) and first <= day <= last:
                     chosen.append(source)
                     break
-    if not chosen:
-        raise FirmsError(f"No FIRMS {family} source covers {day.isoformat()}.")
     return chosen
 
 
@@ -115,8 +124,11 @@ def _fetch_day(source, box, day):
 
     table = fetch_area(source, area=box, days=1, date=day)
     if disk is not None:
+        # Write to a side file and rename, so a concurrent reader never loads a half-written CSV
         disk.parent.mkdir(parents=True, exist_ok=True)
-        table.to_csv(disk, index=False)
+        partial = disk.with_name(f"{disk.name}.{os.getpid()}.{threading.get_ident()}.part")
+        table.to_csv(partial, index=False)
+        os.replace(partial, disk)
     with _cache_lock:
         _cache[key] = (time.time(), table)
     return table
@@ -229,6 +241,9 @@ def fire_mask(grid, day, prefer="MODIS", satellites=("Terra",), viirs_satellites
         }
         return mask, info
 
+    if errors and len(errors) == len(order):
+        # Every request failed: we don't know today's fire, which is not the same as "no fire"
+        raise FirmsError("Could not get today's fire detections. " + "; ".join(errors))
     mask = np.zeros((grid.size, grid.size), dtype=np.float32)
     return mask, {
         "source": prefer,

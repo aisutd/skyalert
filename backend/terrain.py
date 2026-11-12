@@ -159,9 +159,12 @@ def elevation(grid, zoom=ZOOM):
         rows, cols = grid.cell_of(lats.ravel(), lons.ravel())
         inside = rows >= 0
         flat = rows[inside] * size + cols[inside]
-        sums += np.bincount(flat, weights=values.ravel()[inside].astype(np.float64), minlength=size * size)
+        # Clamp every source pixel before averaging: SRTM, behind the training tiles, stores the sea
+        # as 0, while Terrarium has sea depths. Clamping after averaging would let depths pull
+        # coastline pixels down.
+        land = np.maximum(values.ravel()[inside].astype(np.float64), 0.0)
+        sums += np.bincount(flat, weights=land, minlength=size * size)
         counts += np.bincount(flat, minlength=size * size)
     with np.errstate(invalid="ignore", divide="ignore"):
         mean = np.where(counts > 0, sums / counts, np.nan)
-    mean = np.where(mean < 0, 0.0, mean)  # NaN stays NaN
     return mean.reshape(size, size).astype(np.float32)
