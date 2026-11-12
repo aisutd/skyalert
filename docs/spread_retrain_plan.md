@@ -24,7 +24,8 @@ The user asked that this never strain the Mac.
 - **CPU:** `torch.set_num_threads(4)`; NumPy/BLAS threads capped at 4 (`OMP_NUM_THREADS=4`,
   `VECLIB_MAXIMUM_THREADS=4`).
 - **GPU (MPS):** batch size at most 64; `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.5`, so PyTorch can't take
-  more than half the GPU memory. CPU fallback is fine.
+  more than half the GPU memory. Also set `PYTORCH_MPS_LOW_WATERMARK_RATIO=0.4`: the high ratio alone
+  makes PyTorch refuse to start (its default low ratio, 1.4, is above 0.5). CPU fallback is fine.
 - **Memory:** process memory under about 6 GB (the Mac has 19 GB). Datasets are float16 memory-mapped
   files on disk, never loaded whole into RAM.
 - **Disk:** everything under `data/` (gitignored), at most about 25 GB total. Check free space first;
@@ -102,13 +103,16 @@ No pixel is "uncertain": FIRMS has no cloud mask, so a cloudy pixel looks like n
   - positive weight
   - with and without fire history
   - optionally fine-tuning from the NDWS weights for the channels they share
-- **Selection:** by val IoU; test is opened once for the winner.
+- **Early stopping and selection:** by val IoU at the threshold re-chosen on val each epoch
+  (PR-AUC is logged too); test is opened once for the winner.
 
 ## Baselines (all on the same tiles and masks)
 
 1. Persistence: tomorrow = today.
 2. Persistence dilated by 1 and by 2 pixels.
-3. Persistence plus downwind growth: today's fire grown 1 to 2 pixels toward where the wind blows.
+3. Persistence plus downwind growth: today's fire plus copies shifted 1..r pixels along the unit
+   vector of the mean (wind_u, wind_v) over today's fire pixels (r = 1, 2); plain persistence
+   below 0.5 m/s.
 4. The old NDWS model fed the matching live inputs (MODIS-trained, for reference).
 
 ## Steps
