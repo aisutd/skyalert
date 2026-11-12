@@ -10,3 +10,4 @@ tifffile
 kaggle
 torch
 pytest
+h5py
