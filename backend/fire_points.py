@@ -47,6 +47,14 @@ POINT_COLUMNS = [
 
 # Extra margin around the tile when asking FIRMS, so detections on the tile's edge aren't lost
 QUERY_PAD_DEG = 0.05
+# Each detection marks a rectangle of FOOTPRINT_SCALE x its FIRMS pixel size (scan km east-west,
+# track km north-south), not only the pixel holding its centre. MOD14A1, behind the training fire
+# masks, grids the whole swath pixel, and MODIS pixels grow from 1 km at nadir to about 2 x 4.8 km
+# at the swath edge. On 19 dated training tiles (demos/reconstruct_spread_tiles.py) agreement with
+# the stored MOD14A1 masks (IoU) went from 0.34 with centre pixels to 0.63 with scale 0.5; scale 1
+# over-marks (precision 0.60). 0 = centre pixel only.
+FOOTPRINT_SCALE = 0.5
+KM_PER_DEG_LAT = 111.32
 # Near-real-time data for recent days keeps growing as passes are processed, so it's reused
 # for a short time only. Archive (SP) data doesn't change.
 NRT_CACHE_SECONDS = 10 * 60
@@ -180,6 +188,43 @@ def fire_points(south, west, north, east, day, family="MODIS"):
     return pd.concat(non_empty, ignore_index=True)
 
 
+def footprint_mask(grid, points, scale=FOOTPRINT_SCALE):
+    """A 0/1 float32 mask marking each detection's footprint rectangle (and always its centre pixel).
+
+    The rectangle is scale x scan km east-west by scale x track km north-south, centred on the
+    detection. It is sampled every third of a pixel and rasterized with grid.rasterize, so a
+    pixel is marked when a sample lands in it. Detections just outside the tile can still mark
+    edge pixels; samples outside the tile are ignored.
+    """
+    lats = [points["latitude"].to_numpy(dtype=float)]
+    lons = [points["longitude"].to_numpy(dtype=float)]
+    if scale > 0 and len(points):
+        has_size = points["scan"].notna() & points["track"].notna() if {"scan", "track"} <= set(points.columns) else None
+        sized = points[has_size] if has_size is not None else points.iloc[0:0]
+        for lat, lon, scan, track in zip(
+            sized["latitude"].to_numpy(dtype=float), sized["longitude"].to_numpy(dtype=float),
+            sized["scan"].to_numpy(dtype=float), sized["track"].to_numpy(dtype=float),
+        ):
+            half_ns = scale * track / 2 / KM_PER_DEG_LAT
+            half_ew = scale * scan / 2 / (KM_PER_DEG_LAT * np.cos(np.radians(lat)))
+            ys = np.arange(lat - half_ns, lat + half_ns + 1e-9, grid.lat_step / 3)
+            xs = np.arange(lon - half_ew, lon + half_ew + 1e-9, grid.lon_step / 3)
+            yy, xx = np.meshgrid(ys, xs, indexing="ij")
+            lats.append(yy.ravel())
+            lons.append(xx.ravel())
+    return grid.rasterize(np.concatenate(lats), np.concatenate(lons))
+
+
+def _points_on_day(points, day, satellites):
+    """The given points that are on `day` and from `satellites` (anywhere in the queried box)."""
+    if points is None or len(points) == 0:
+        return points.iloc[0:0] if points is not None else pd.DataFrame(columns=POINT_COLUMNS)
+    return points[
+        (points["acq_date"].astype(str) == day.isoformat())
+        & points["satellite"].map(normalize_satellite).isin(satellites)
+    ]
+
+
 def _points_in_tile(grid, points, day, satellites):
     """The given points that are on `day`, from `satellites`, and inside the tile."""
     if points is None or len(points) == 0:
@@ -192,13 +237,17 @@ def _points_in_tile(grid, points, day, satellites):
     return points[rows >= 0]
 
 
-def fire_mask(grid, day, prefer="MODIS", satellites=("Terra",), viirs_satellites=VIIRS_SATELLITES, points=None):
+def fire_mask(
+    grid, day, prefer="MODIS", satellites=("Terra",), viirs_satellites=VIIRS_SATELLITES, points=None,
+    footprint_scale=FOOTPRINT_SCALE,
+):
     """Today's fire for a tile: (float32 (64, 64) mask of 0 and 1, info dict).
 
     Uses the preferred family's detections from `satellites` (MODIS) or `viirs_satellites`
     (VIIRS). If there are none in the tile, or that request fails, falls back to the other
     family. `points` = {"MODIS": DataFrame, "VIIRS": DataFrame} uses those detections instead
-    of asking FIRMS (a missing family is treated as unavailable).
+    of asking FIRMS (a missing family is treated as unavailable). Each detection marks its
+    footprint (see footprint_mask); footprint_scale=0 marks only the pixel holding its centre.
     """
     if prefer not in FAMILY_SOURCES:
         raise ValueError(f"prefer must be one of {FAMILIES}, got {prefer!r}")
@@ -227,7 +276,9 @@ def fire_mask(grid, day, prefer="MODIS", satellites=("Terra",), viirs_satellites
         if len(inside) == 0:
             notes.append(f"{family}: no detections from {', '.join(allowed[family])} in the tile")
             continue
-        mask = grid.rasterize(inside["latitude"].to_numpy(dtype=float), inside["longitude"].to_numpy(dtype=float))
+        # Footprints of every detection that day in the queried box, so a fire just over the edge
+        # still marks the edge pixels it covers
+        mask = footprint_mask(grid, _points_on_day(table, day, allowed[family]), footprint_scale)
         info = {
             "source": family,
             "firms_sources": firms_sources,
@@ -235,6 +286,7 @@ def fire_mask(grid, day, prefer="MODIS", satellites=("Terra",), viirs_satellites
             "day": day.isoformat(),
             "n_points": int(len(inside)),
             "n_fire_pixels": int(mask.sum()),
+            "footprint_scale": footprint_scale,
             "fallback": position > 0,
             "reason": "; ".join(errors + notes) if position > 0 else None,
             "errors": errors,

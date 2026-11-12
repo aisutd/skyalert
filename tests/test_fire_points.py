@@ -320,7 +320,7 @@ def test_fire_mask_matches_grid_cells(stub_firms, row0_is_south):
     lats = rng.uniform(south - 0.1, north + 0.1, 200)
     lons = rng.uniform(west - 0.1, east + 0.1, 200)
     answers["MODIS_SP"] = modis_rows(list(zip(lats, lons)))
-    mask, info = fp.fire_mask(grid, DAY)
+    mask, info = fp.fire_mask(grid, DAY, footprint_scale=0)  # centre pixels only: tests alignment
     rows, cols = grid.cell_of(lats, lons)
     expected = np.zeros((64, 64), dtype=np.float32)
     expected[rows[rows >= 0], cols[rows >= 0]] = 1
@@ -454,3 +454,55 @@ def test_key_is_redacted_even_when_it_straddles_the_message_cut(monkeypatch):
         firms_client.fetch_area("MODIS_NRT", "-125,24,-66,50", map_key=key)
     message = str(caught.value)
     assert key[:8] not in message and key[-8:] not in message and "abcdef0123456" not in message
+
+
+
+# --- detection footprints ------------------------------------------------------------------
+
+
+def _one_detection(grid, row, col, scan, track):
+    lat, lon = float(grid.lats[row, col]), float(grid.lons[row, col])
+    return pd.DataFrame({"latitude": [lat], "longitude": [lon], "scan": [scan], "track": [track]}), lat, lon
+
+
+def test_footprint_covers_the_scaled_rectangle_and_nothing_else():
+    grid = TileGrid.around(*CENTER)
+    points, lat, lon = _one_detection(grid, 31, 31, scan=4.8, track=2.0)  # edge-of-swath MODIS pixel
+    mask = fp.footprint_mask(grid, points, scale=0.5)
+    assert mask[31, 31] == 1
+    half_ns = 0.5 * 2.0 / 2 / fp.KM_PER_DEG_LAT
+    half_ew = 0.5 * 4.8 / 2 / (fp.KM_PER_DEG_LAT * np.cos(np.radians(lat)))
+    marked = mask == 1
+    # Every marked pixel touches the rectangle (its centre is within half a pixel of it)
+    assert np.all(np.abs(grid.lats[marked] - lat) <= half_ns + grid.lat_step / 2 + 1e-9)
+    assert np.all(np.abs(grid.lons[marked] - lon) <= half_ew + grid.lon_step / 2 + 1e-9)
+    # 2.4 km east-west spans more pixels than 1 km north-south
+    rows, cols = np.nonzero(mask)
+    assert np.ptp(cols) > np.ptp(rows)
+
+
+def test_footprint_scale_zero_or_missing_size_is_the_centre_pixel():
+    grid = TileGrid.around(*CENTER)
+    points, _, _ = _one_detection(grid, 10, 20, scan=4.8, track=2.0)
+    assert fp.footprint_mask(grid, points, scale=0).sum() == 1
+    no_size = points.assign(scan=np.nan, track=np.nan)
+    assert fp.footprint_mask(grid, no_size, scale=0.5).sum() == 1
+
+
+def test_footprint_of_a_detection_just_outside_marks_the_edge():
+    grid = TileGrid.around(*CENTER)
+    south, west, north, east = grid.bounds
+    points = pd.DataFrame({"latitude": [(south + north) / 2], "longitude": [east + 0.2 * grid.lon_step],
+                           "scan": [4.0], "track": [1.0]})
+    mask = fp.footprint_mask(grid, points, scale=0.5)
+    assert mask[:, -1].sum() >= 1 and mask[:, :-2].sum() == 0
+
+
+def test_fire_mask_uses_footprints_by_default(stub_firms):
+    answers, _ = stub_firms
+    grid = TileGrid.around(*CENTER)
+    rows = modis_rows([CENTER]).assign(scan=4.8, track=2.0)
+    answers["MODIS_SP"] = rows
+    mask, info = fp.fire_mask(grid, DAY)
+    assert info["footprint_scale"] == fp.FOOTPRINT_SCALE == 0.5
+    assert mask.sum() > 1 and info["n_points"] == 1

@@ -26,7 +26,7 @@ live, lagged, or filled, and the model's test scores are shown next to the forec
 | 0 | Dashboard uses NOAA-20 + NOAA-21; cleaning handles missing FRP | Done, `dc58603` |
 | 1 | `backend/spread_model.py`, parity tests, demo uses it | Done, `bc8da3a` |
 | 2 | Input builder: grid, terrain, gridMET, FIRMS fires, assembly | Done |
-| 2b | Reconstruction check: rebuild located training tiles channel by channel | Paused 2026-11-11: draft `demos/reconstruct_spread_tiles.py` (uncommitted, unverified) |
+| 2b | Reconstruction check: rebuild located training tiles channel by channel | Done: `docs/spread_reconstruction_report.md` |
 | 3 | `demos/backtest_spread.py`: score live-style inputs on past fires | Paused 2026-11-11: draft script (uncommitted, unverified), no results yet |
 | Review | Independent correctness review of the step 2 code | Done: 1 critical (weather node anchor), 1 major (fire layer on FIRMS failure), 3 minor; all fixed |
 | Gate | Show backtest numbers to the team | |
@@ -92,7 +92,7 @@ Verified by probing on 2026-11-11 (`research/data_sources.md` in the scratchpad)
 | pdsi | gridMET `MET/pdsi/pdsi.nc` | Latest pentad on or before day t, bicubic from the 1/24° grid to the pixel centres | lagged |
 | NDVI | none | NaN | filled |
 | population | none | NaN | filled |
-| PrevFireMask | FIRMS MODIS (SP until 2026-08-31, NRT after), Terra only, one UTC day | 1 in every tile pixel that contains a detection, else 0. No −1 (we can't see clouds) | live |
+| PrevFireMask | FIRMS MODIS (SP until 2026-08-31, NRT after), Terra only, one UTC day | 1 in every tile pixel covered by a detection's footprint (0.5 × scan by 0.5 × track km), else 0. No −1 (we can't see clouds) | live |
 | PrevFireMask fallback | FIRMS VIIRS NOAA-20 / NOAA-21 | Same, used only when MODIS has no Terra detection in the tile or the request fails | live (fallback) |
 
 ### gridMET facts (verified)
@@ -223,7 +223,25 @@ missing ocean node.
 - **Pass mark for the gate.** The model must beat persistence on IoU, with the live-lag weather
   and live fire source, and the bootstrap interval must say whether that win is real.
 
-## Reconstruction check (step 2b)
+## Reconstruction check (step 2b): results
+
+`demos/reconstruct_spread_tiles.py`, full report in `docs/spread_reconstruction_report.md`.
+43 DEM-located training tiles were dated; 19 confidently (weather match and FIRMS fire overlap).
+- **Weather window: mean of gridMET days t−1 and t** (public code, `lag=0`). Lowest error for every
+  variable (e.g. wind speed MAE 0.074 m/s vs 0.21 for day t only and 0.36 for t−2, t−1).
+- **PDSI: latest pentad dated on or before t** reproduces the stored channel exactly.
+- **Wind direction:** no convention error (median 1.8° on tiles away from north).
+- **Rebuilt channels vs stored** (median corr): elevation 0.992, pdsi 1.000, tmmn 0.963, tmmx 0.944,
+  vs 0.963, sph 0.945, pr 0.960, erc 0.904, th 0.943.
+- **Model cost** (pooled IoU against the stored next-day label, threshold 0.621): stored inputs
+  0.208; NDVI and population filled 0.205; our full rebuild 0.201; our rebuild with live-lag
+  weather 0.186; persistence 0.166.
+- **Fire mask:** centre pixels caught only about 40% of the MOD14A1 fire pixels (IoU 0.34).
+  Marking each detection's footprint at half its scan × track size raises that to 0.63 and the
+  model's IoU on stored inputs to 0.209. Now the default (`fire_points.FOOTPRINT_SCALE = 0.5`).
+  Chosen on these 19 tiles, so the backtest re-checks it on independent tiles.
+
+What the check was designed to settle:
 
 Three training tiles have known locations (DEM match). For each, find its fire day t: the
 stored PrevFireMask should match FIRMS MODIS Terra detections rasterized on day t, and the
