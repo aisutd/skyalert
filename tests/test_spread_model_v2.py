@@ -178,6 +178,7 @@ def test_evaluation_reports_each_stratum(tmp_path):
     groups = {(r["group"], r["tiles"]) for r in out}
     assert ("all", 12) in groups and ("stratum=growing", 4) in groups and ("stratum=small", 8) in groups
     assert ("region=West-N", 12) in groups
+    assert not any(g == evaluate_v2.LIVE_MIX for g, _ in groups)  # no sample_prob column here
     pd.DataFrame([{"split": "val", "index": 0}]).to_csv(data / "tiles.csv", index=False)
     with pytest.raises(ValueError):
         evaluate_v2.evaluate_split(tmp_path / "runs" / "s", "val", data_dir=data, reps=20)

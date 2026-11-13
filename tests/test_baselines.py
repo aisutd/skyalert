@@ -138,3 +138,32 @@ def test_bootstrap_difference():
 def test_per_tile_iou_nan_when_nothing_anywhere():
     out = evaluate_v2.per_tile_iou(np.zeros((2, 4, 4)), np.zeros((2, 4, 4)))
     assert np.isnan(out).all()
+
+
+
+def test_weighted_scores_equal_duplicated_tiles():
+    # Weight 2 on a tile must give the same pooled scores as that tile appearing twice
+    rng = np.random.default_rng(4)
+    pred = rng.random((3, 16, 16)) > 0.7
+    label = rng.random((3, 16, 16)) > 0.7
+    today = rng.random((3, 16, 16)) > 0.8
+    weighted = evaluate_v2.weighted_scores(evaluate_v2.per_tile_counts(pred, label, today), [2.0, 1.0, 1.0])
+    dup = evaluate_v2.pooled_scores(np.concatenate([pred[:1], pred]), np.concatenate([label[:1], label]), np.concatenate([today[:1], today]))
+    for key in ("precision", "recall", "iou", "f1", "new_fire_recall", "new_fire_precision"):
+        assert weighted[key] == pytest.approx(dup[key])
+    unweighted = evaluate_v2.weighted_scores(evaluate_v2.per_tile_counts(pred, label, today))
+    assert unweighted["iou"] == pytest.approx(evaluate_v2.pooled_scores(pred, label, today)["iou"])
+
+
+def test_weighted_average_precision_equals_duplication():
+    rng = np.random.default_rng(5)
+    p = rng.random((40, 32, 32)).astype(np.float32)
+    y = rng.random((40, 32, 32)) < p * 0.5
+    weights = rng.choice([1.0, 2.0, 3.0], 40)
+    w = evaluate_v2.weighted_average_precision(p, y, weights)
+    repeat = np.repeat(np.arange(40), weights.astype(int))
+    dup = evaluate_v2.average_precision(p[repeat], y[repeat])
+    # Duplicated pixels tie; the unweighted sum scores the two copies at successive ranks, the
+    # weighted one scores the pair once at the end, so they agree to about 1e-4, not exactly
+    assert w == pytest.approx(dup, rel=1e-3)
+    assert evaluate_v2.weighted_average_precision(p, y, None) == pytest.approx(evaluate_v2.average_precision(p, y))

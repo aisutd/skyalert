@@ -95,6 +95,57 @@ def choose_threshold(probabilities, label, bins=THRESHOLD_BINS):
     return float(thresholds[best]), float(iou[best])
 
 
+COUNT_KEYS = ("hits", "forecast_px", "burned_px", "union", "new_hits", "new_burned_px", "forecast_outside_today_px")
+
+
+def per_tile_counts(predicted, label, fire_t):
+    """The counts() quantities per tile: dict of int64 arrays of length n_tiles."""
+    p, y, today = _bool(predicted), _bool(label), _bool(fire_t)
+    new = y & ~today
+    axes = (1, 2)
+    return {
+        "hits": (p & y).sum(axes), "forecast_px": p.sum(axes), "burned_px": y.sum(axes),
+        "union": (p | y).sum(axes), "new_hits": (p & new).sum(axes), "new_burned_px": new.sum(axes),
+        "forecast_outside_today_px": (p & ~today).sum(axes),
+    }
+
+
+def weighted_scores(tile_counts, weights=None):
+    """Pooled scores from per-tile counts. With weights, every tile's pixel counts are multiplied
+    by its weight before summing (so pixel totals become weighted pixel totals)."""
+    w = np.ones(len(tile_counts["hits"])) if weights is None else np.asarray(weights, dtype=np.float64)
+    return scores_from_counts({key: float((tile_counts[key] * w).sum()) for key in COUNT_KEYS})
+
+
+def weighted_average_precision(probabilities, label, weights=None):
+    """average_precision with each pixel weighted by its tile's weight (None = unweighted)."""
+    if weights is None:
+        return average_precision(probabilities, label)
+    p = np.asarray(probabilities, dtype=np.float64).reshape(len(weights), -1)
+    y = _bool(label).reshape(len(weights), -1)
+    w = np.broadcast_to(np.asarray(weights, dtype=np.float64)[:, None], p.shape).ravel()
+    p, y = p.ravel(), y.ravel()
+    if not y.any():
+        return float("nan")
+    order = np.argsort(-p, kind="stable")
+    hit_w = (y[order] * w[order])
+    precision = np.cumsum(hit_w) / np.cumsum(w[order])
+    return float((precision * hit_w).sum() / hit_w.sum())
+
+
+def bootstrap_weighted_iou_difference(counts_a, counts_b, weights=None, reps=1000, seed=0):
+    """Pooled (optionally weighted) IoU(a) - IoU(b) and a 95% interval, resampling tiles."""
+    n = len(counts_a["hits"])
+    w = np.ones(n) if weights is None else np.asarray(weights, dtype=np.float64)
+    ha, ua = counts_a["hits"] * w, counts_a["union"] * w
+    hb, ub = counts_b["hits"] * w, counts_b["union"] * w
+    draws = np.random.default_rng(seed).integers(0, n, size=(reps, n))
+    diff = ha[draws].sum(1) / np.maximum(ua[draws].sum(1), 1e-12) - hb[draws].sum(1) / np.maximum(ub[draws].sum(1), 1e-12)
+    point = ha.sum() / max(ua.sum(), 1e-12) - hb.sum() / max(ub.sum(), 1e-12)
+    low, high = np.percentile(diff, [2.5, 97.5])
+    return {"difference": float(point), "ci_low": float(low), "ci_high": float(high)}
+
+
 def per_tile_hits_union(predicted, label):
     p, y = _bool(predicted), _bool(label)
     return (p & y).sum(axis=(1, 2)).astype(np.int64), (p | y).sum(axis=(1, 2)).astype(np.int64)
@@ -125,17 +176,20 @@ def bootstrap_iou_difference(predicted_a, predicted_b, label, reps=1000, seed=0)
 
 
 GROUP_COLUMNS = ("stratum",)  # reported automatically when tiles.csv has them; --by adds more
+LIVE_MIX = "live mix (1/sample_prob)"
 
 
 def split_groups(data_dir, split, n, columns=GROUP_COLUMNS):
-    """{"all": every tile, "<column>=<value>": tile indices, ...} from data_dir/tiles.csv.
+    """{group name: (tile indices, tile weights or None)} from data_dir/tiles.csv.
 
-    The split's rows of tiles.csv, ordered by `index`, must line up with the split's arrays.
-    Columns missing from tiles.csv (or a missing tiles.csv) are skipped.
+    "all" is every tile, unweighted (for the full build, the stratified 50/50 sample). Each
+    "<column>=<value>" is that subset, unweighted. When tiles.csv has sample_prob, LIVE_MIX is every
+    tile weighted by 1/sample_prob, i.e. re-weighted to the natural mix of tiles a live user would
+    click. The split's rows of tiles.csv, ordered by `index`, must line up with the split's arrays.
     """
     import pandas as pd
 
-    groups = {"all": np.arange(n)}
+    groups = {"all": (np.arange(n), None)}
     path = Path(data_dir) / "tiles.csv"
     if not path.exists():
         return groups
@@ -146,7 +200,12 @@ def split_groups(data_dir, split, n, columns=GROUP_COLUMNS):
     for column in columns:
         if column in tiles.columns:
             for value in sorted(tiles[column].dropna().unique(), key=str):
-                groups[f"{column}={value}"] = np.flatnonzero((tiles[column] == value).to_numpy())
+                groups[f"{column}={value}"] = (np.flatnonzero((tiles[column] == value).to_numpy()), None)
+    if "sample_prob" in tiles.columns:
+        prob = tiles["sample_prob"].to_numpy(dtype=np.float64)
+        if not ((prob > 0) & (prob <= 1)).all():
+            raise ValueError("sample_prob must be in (0, 1]")
+        groups[LIVE_MIX] = (np.arange(n), 1.0 / prob)
     return groups
 
 
@@ -176,16 +235,16 @@ def evaluate_split(run_folder, split, data_dir=None, allow_test=False, batch_siz
         forecasts[name] = forecast
 
     rows = []
+    tile_counts = {name: per_tile_counts(forecast, label, fire_t) for name, forecast in forecasts.items()}
     groups = split_groups(data_dir, split, len(label), GROUP_COLUMNS + tuple(by))
-    for group, idx in groups.items():
-        persistence = forecasts["persistence"][idx]
-        for name, forecast in forecasts.items():
-            row = {"group": group, "tiles": len(idx), "forecast": name,
-                   **pooled_scores(forecast[idx], label[idx], fire_t[idx])}
+    for group, (idx, weights) in groups.items():
+        sub = {name: {k: v[idx] for k, v in counts.items()} for name, counts in tile_counts.items()}
+        for name in forecasts:
+            row = {"group": group, "tiles": len(idx), "forecast": name, **weighted_scores(sub[name], weights)}
             if name.startswith("model"):
-                row["pr_auc"] = average_precision(probabilities[idx], label[idx])
+                row["pr_auc"] = weighted_average_precision(probabilities[idx], label[idx], weights)
             if name != "persistence" and len(idx):
-                diff = bootstrap_iou_difference(forecast[idx], persistence, label[idx], reps)
+                diff = bootstrap_weighted_iou_difference(sub[name], sub["persistence"], weights, reps)
                 row.update({f"vs_persistence_{k}": v for k, v in diff.items()})
             rows.append(row)
     return rows
