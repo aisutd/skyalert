@@ -7,16 +7,27 @@
 //   frontend function    ->  FastAPI endpoint (backend/dashboard.py)  ->  Python that makes the data
 //   getSummary()         ->  GET /api/summary                 ->  main.fetch_fires()
 //   getFires()           ->  GET /api/fires                   ->  main.fetch_fires()
-//                                                                 = src/firms_client.fetch_viirs()
-//                                                                   + src/data_cleaning.clean_viirs()
+//                                                                 = backend/firms_client.fetch_viirs()
+//                                                                   + backend/data_cleaning.clean_viirs()
 //   getFireContext()     ->  GET /api/fire-context            ->  backend/fire_context.get_fire_context()
+//   getSpreadForecast()  ->  GET /api/spread-forecast         ->  backend/spread_forecast.forecast()
 
 const API_BASE = '/api' // forwarded to the FastAPI server by vite.config.js
 
-// GET one FastAPI endpoint and return its JSON; throws if the server answers with an error
+// GET one FastAPI endpoint and return its JSON; throws if the server answers with an error,
+// using the server's own explanation ("detail") when it gives one
 async function getJson(path) {
   const res = await fetch(`${API_BASE}${path}`)
-  if (!res.ok) throw new Error(`Server returned ${res.status}`)
+  if (!res.ok) {
+    let detail = null
+    try {
+      const body = await res.json()
+      if (typeof body.detail === 'string') detail = body.detail
+    } catch {
+      // not JSON; fall back to the status code
+    }
+    throw new Error(detail ?? `Server returned ${res.status}`)
+  }
   return res.json()
 }
 
@@ -33,4 +44,9 @@ export function getFires() {
 // Place name, weather and fire-weather risk for one spot, for the popup
 export function getFireContext(lat, lon) {
   return getJson(`/fire-context?lat=${lat}&lon=${lon}`)
+}
+
+// Next-day spread forecast around one fire, for the map overlay (backend/spread_forecast.py)
+export function getSpreadForecast(lat, lon) {
+  return getJson(`/spread-forecast?lat=${lat}&lon=${lon}`)
 }

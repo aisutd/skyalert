@@ -34,6 +34,11 @@ live, lagged, or filled, and the model's test scores are shown next to the forec
 | 5 | Map overlay, popup button, legend | After the gate |
 | 6 | README, APIS.md, credits | After the gate |
 
+## Outcome
+
+The gate below failed for the Kaggle-trained model. A model retrained on live-style tiles
+(`docs/spread_retrain_plan.md`) passed on held-out years and is what the dashboard serves.
+
 ## Gate result (2026-11-12): failed
 
 336 tiles centred on a day-t Terra fire, 168 fire-season days 2018–2024, all regions. Inputs built

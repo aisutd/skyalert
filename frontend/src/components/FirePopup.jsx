@@ -75,7 +75,7 @@ function Stat({ label, value, sub, tag, accent }) {
 
 // The card that opens next to a clicked fire dot.
 // map: the Leaflet map. fire: one row from /api/fires. safeTop: px of the map hidden by the stat cards.
-export default function FirePopup({ map, fire, safeTop, onClose, onOpenAnalysis }) {
+export default function FirePopup({ map, fire, safeTop, onClose, onOpenAnalysis, onForecastSpread }) {
   const panel = useRef(null)
   const [place, setPlace] = useState(null)
   const { status, context } = useFireContext(fire)
@@ -204,7 +204,10 @@ export default function FirePopup({ map, fire, safeTop, onClose, onOpenAnalysis 
           )
         )}
 
-        <div className="popup-item">
+        <div className="popup-item popup-actions">
+          <button type="button" className="popup-forecast" onClick={() => onForecastSpread(fire)}>
+            Forecast next-day spread
+          </button>
           <button
             type="button"
             className="popup-analysis"

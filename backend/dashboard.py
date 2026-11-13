@@ -1,9 +1,10 @@
 import threading
 import time
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import Response
 
+from backend import spread_forecast
 from backend.fire_context import get_fire_context
 from main import CONFIDENCE_LABELS, DAY_RANGE, FIRMS_SOURCES, REGION_NAME, US_BOUNDS, fetch_fires
 
@@ -77,6 +78,18 @@ def fires():
 def fire_context(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, le=180)):
     """Place name, weather and fire-weather risk for one spot, for the map's popup."""
     return get_fire_context(lat, lon)
+
+
+# OUR API: /api/spread-forecast?lat=&lon=. Feeds the map's next-day spread overlay: where the v2 model
+# (models/spread_v2) expects fire on the next day, around the clicked fire. Built from NOAA-20 fire
+# detections (FIRMS), gridMET weather and AWS terrain (backend/spread_forecast.py)
+@app.get("/api/spread-forecast")
+def spread_forecast_endpoint(lat: float = Query(ge=24, le=50), lon: float = Query(ge=-125, le=-66)):
+    """Next-day fire spread forecast for the 64 x 64 pixel tile around one spot."""
+    try:
+        return spread_forecast.forecast(lat, lon)
+    except spread_forecast.ForecastUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from None
 
 
 if __name__ == "__main__":

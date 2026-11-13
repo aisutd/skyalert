@@ -123,9 +123,38 @@ No pixel is "uncertain": FIRMS has no cloud mask, so a cloudy pixel looks like n
 | R2 | Tile sampler and dataset builder (`training/build_spread_dataset.py`), quick sample first, then full | data agent |
 | R3 | Model v2, training loop, baselines, evaluation (`training/`), built and tested on the quick sample while R2 runs | training agent |
 | R4 | Full training runs (after R2 finishes; one at a time) | training agent |
-| R5 | Independent review of R1 to R4 | reviewer |
-| R6 | Test-split scoring of the winner and the baselines, then report to the team | lead |
+| R5 | Independent review of R1 to R4 and the live forecast | reviewer (running) |
+| R6 | Test-split scoring of the winner and the baselines, then report to the team | Done: passed (see Results) |
 | Gate | If the goal is met: build the API and UI (old plan steps 4 to 6) with the new model | |
+
+## Results (2026-11-13)
+
+Two runs finished before a usage limit stopped the training agent:
+- r1: BCE with positive weight 10, val IoU 0.273.
+- r2: BCE + Dice, val IoU 0.280.
+
+r2 won on val, and only r2 was scored on test (`docs/spread_v2_val_results.txt`,
+`docs/spread_v2_test_results.txt`).
+
+Test, 2024–2025, 4,000 tiles (2,000 growing, 2,000 small):
+
+| Group | Model IoU | Persistence IoU | Difference [95% CI] | New-fire recall / precision |
+|---|---|---|---|---|
+| all | 0.305 | 0.239 | +0.066 [+0.059, +0.073] | 0.140 / 0.332 |
+| growing | 0.318 | 0.258 | +0.060 [+0.054, +0.068] | 0.156 / 0.333 |
+| small | 0.128 | 0.112 | +0.016 [+0.001, +0.031] | 0.013 / 0.268 |
+| live mix (re-weighted) | 0.224 | 0.162 | +0.062 [+0.053, +0.072] | 0.067 / 0.324 |
+
+The model beats every baseline (dilated, downwind, old NDWS model) and forecasts about as many
+pixels as burn (44k vs 42k). Both goals are met.
+
+Caveat: the bootstrap resamples tiles, and tiles of the same fire on nearby days aren't
+independent, so the intervals are somewhat optimistic. The margin over persistence is large
+compared with them.
+
+Shipped as `models/spread_v2/` with `backend/spread_forecast.py` and the map overlay
+(`frontend/src/components/SpreadForecast.jsx`). Live inputs match stored training tiles to float16
+rounding (`tests/test_spread_forecast.py`).
 
 ## Rules for builders
 

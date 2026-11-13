@@ -200,6 +200,29 @@ Scores on the test split, which the models never trained on.
 
 Detection precision and recall count fire pixels against the voting mask. Spread scores count 1 km pixels that burn the next day, leaving out uncertain pixels.
 
+## Next-day spread forecast
+
+Click a fire on the Live Map, then **Forecast next-day spread**. The map shows the model's
+forecast for the next day over the 64 × 64 pixel area around the fire (about 64 km north–south,
+1 km pixels): red where fire is likely, orange where it's possible, and today's fire outlined.
+
+- **Model:** `models/spread_v2/` (weights, input stats, threshold), served by
+  `backend/spread_forecast.py` at `GET /api/spread-forecast`.
+- **Inputs, built live:** NOAA-20 VIIRS fire on the last three days (FIRMS), gridMET weather and
+  drought, and AWS terrain. They're built with the same code as the training tiles, and
+  `tests/test_spread_forecast.py` checks that they match.
+- **Accuracy:** on the 2024–2025 fire seasons, which it never saw, it overlapped 30.5% of the
+  next day's fire area (IoU), against 23.9% for assuming tomorrow looks like today. It caught 14%
+  of new spread. Full scores are in `docs/spread_v2_test_results.txt`.
+- **How it was built:** `docs/spread_retrain_plan.md` is the plan and evidence.
+  - `training/build_spread_dataset.py` builds the tiles. It needs the gridMET yearly files from
+    `python -m backend.gridmet_bulk download`, about 6 GB.
+  - `training/train_spread_v2.py` trains, capped so it stays gentle on a laptop.
+  - `training/evaluate_v2.py` scores against the baselines.
+
+An earlier attempt with the Kaggle-trained model (`backend/spread_model.py`) didn't beat "tomorrow
+= today" on live-style inputs; see `docs/spread_backtest_report.md`.
+
 ## Demos
 
 The demo scripts run the trained models on test data and save figures for presentations to `docs/figures/`. They need the weights and stats downloaded from Kaggle into `data/training/`.
@@ -216,7 +239,10 @@ python demos/spread_examples.py
 
 ```
 main.py                       Fetch and clean FIRMS fires without the dashboard
-backend/                      FIRMS client, cleaning, fire context, FastAPI dashboard API
+backend/                      FIRMS client, cleaning, fire context, spread forecast, FastAPI dashboard API
+models/spread_v2/             The live next-day spread model (weights, stats, threshold)
+training/                     Build the v2 dataset, train, and evaluate the spread model
+tests/                        pytest (python -m pytest tests; add --network for live-service tests)
 frontend/                     React dashboard
 APIS.md                       Every API the project calls and exposes
 docs/integration.md           How fetch, cleaning, map, and dashboard fit together

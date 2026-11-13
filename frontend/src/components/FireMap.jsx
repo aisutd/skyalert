@@ -3,8 +3,10 @@ import { AttributionControl, CircleMarker, MapContainer, TileLayer, useMap, useM
 import { Minus, Plus, Volume2, VolumeX } from 'lucide-react'
 import L from '../lib/leaflet.js'
 import { densityWeights } from '../lib/heatWeights.js'
+import { getSpreadForecast } from '../lib/api.js'
 import { loadSoundSetting, playSound, saveSoundSetting } from '../lib/sound.js'
 import FirePopup from './FirePopup.jsx'
+import { SpreadLegend, SpreadOverlay } from './SpreadForecast.jsx'
 
 const CENTER = [39, -98]
 const ZOOM_START = 4
@@ -107,6 +109,9 @@ export default function FireMap({ fires, error, theme, safeTop, visible, onOpenA
   const selectedRef = useRef(null)
   const soundRef = useRef(soundOn)
   const dotToFire = useMemo(() => new WeakMap(), []) // <path> -> fire, for keyboard use
+  // Next-day spread forecast for one fire: { status: 'loading' | 'ready' | 'error', data, error }
+  const [spread, setSpread] = useState(null)
+  const spreadRequest = useRef(0) // ignore answers to forecasts that were replaced or closed
 
   // trigger: the dot's element when opened from the keyboard, so focus can go back to it
   const select = useCallback((fire, element, fromKeyboard) => {
@@ -125,6 +130,24 @@ export default function FireMap({ fires, error, theme, safeTop, visible, onOpenA
     selectedRef.current = null
     setSelected(null)
     if (current.trigger && document.contains(current.trigger)) current.trigger.focus({ preventScroll: true })
+  }, [])
+
+  // "Forecast next-day spread" in the popup: close the popup so the map is visible, then load it
+  const forecastSpread = useCallback(
+    (fire) => {
+      const request = ++spreadRequest.current
+      close()
+      setSpread({ status: 'loading', data: null, error: null })
+      getSpreadForecast(fire.latitude, fire.longitude)
+        .then((data) => request === spreadRequest.current && setSpread({ status: 'ready', data, error: null }))
+        .catch((err) => request === spreadRequest.current && setSpread({ status: 'error', data: null, error: err.message }))
+    },
+    [close]
+  )
+
+  const closeSpread = useCallback(() => {
+    spreadRequest.current += 1
+    setSpread(null)
   }, [])
 
   // Keyboard: Enter / Space on a focused fire dot opens it
@@ -187,6 +210,7 @@ export default function FireMap({ fires, error, theme, safeTop, visible, onOpenA
             interactive={false}
           />
         )}
+        {spread?.data && <SpreadOverlay forecast={spread.data} theme={theme} />}
         <MapClick onClick={close} />
       </MapContainer>
 
@@ -228,8 +252,17 @@ export default function FireMap({ fires, error, theme, safeTop, visible, onOpenA
         </div>
       </div>
 
+      {spread && <SpreadLegend state={spread} onClose={closeSpread} />}
+
       {map && selected && (
-        <FirePopup map={map} fire={selected.fire} safeTop={safeTop} onClose={close} onOpenAnalysis={onOpenAnalysis} />
+        <FirePopup
+          map={map}
+          fire={selected.fire}
+          safeTop={safeTop}
+          onClose={close}
+          onOpenAnalysis={onOpenAnalysis}
+          onForecastSpread={forecastSpread}
+        />
       )}
     </div>
   )
