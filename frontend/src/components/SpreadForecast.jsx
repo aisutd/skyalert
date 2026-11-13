@@ -16,7 +16,7 @@ const COLORS = {
 }
 
 function drawForecast(forecast, outline) {
-  const { size, probability, fire_today: today, threshold } = forecast
+  const { size, probability, likely, fire_today: today, threshold } = forecast
   const canvas = document.createElement('canvas')
   canvas.width = size * CELL
   canvas.height = size * CELL
@@ -24,7 +24,7 @@ function drawForecast(forecast, outline) {
   for (let row = 0; row < size; row++) {
     for (let col = 0; col < size; col++) {
       const p = probability[row][col]
-      if (p >= threshold) {
+      if (likely[row][col]) {
         ctx.fillStyle = `rgba(${COLORS.likely.join(',')}, 0.78)`
       } else if (p >= POSSIBLE_FROM) {
         // Fade in from faint to half-opaque as the probability approaches the threshold
@@ -130,9 +130,12 @@ export function SpreadLegend({ state, onClose }) {
             New spread forecast: {Math.round(forecast.new_fire_pixels * km2)} km² beyond today's fire.
           </p>
           <p className="spread-accuracy">
-            How good is it? On 2024–25 fires it never saw, the forecast overlapped {percent(scores.model.iou)} of the
-            next day's fire area, against {percent(scores.persistence.iou)} for assuming tomorrow looks like today. It
-            caught {percent(scores.model.new_fire_recall)} of new spread. Treat it as guidance, not a prediction of record.
+            How good is it? Tested on 2024–25 fires it never saw, its overlap score with what actually burned the next
+            day (IoU, 0–1) was {scores.all_fires.model.iou.toFixed(2)}, against {scores.all_fires.persistence.iou.toFixed(2)} for
+            assuming tomorrow looks like today; on larger, growing fires {scores.growing_fires.model.iou.toFixed(2)} against{' '}
+            {scores.growing_fires.persistence.iou.toFixed(2)}. About {percent(scores.all_fires.model.precision)} of the area it
+            marks likely did burn, and it caught {percent(scores.growing_fires.model.new_fire_recall)} of new spread on
+            growing fires. Treat it as guidance, not a certainty.
           </p>
           {forecast.notes.length > 0 && (
             <ul className="spread-notes">

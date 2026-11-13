@@ -34,13 +34,16 @@ def stubbed(monkeypatch):
     """Every source stubbed: one detection at the tile centre on day t, constant weather."""
     lat, lon = 37.0, -119.0
 
-    def points(south, west, north, east, day, family="VIIRS"):
-        rows = [] if day != dt.date(2026, 11, 12) else [{"latitude": lat, "longitude": lon, "satellite": "N20", "frp": 50.0, "scan": 0.4, "track": 0.4}]
-        rows.append({"latitude": lat, "longitude": lon, "satellite": "N21", "frp": 99.0, "scan": 0.4, "track": 0.4})  # must be ignored
+    def day_points(day):
+        # The nationwide NOAA-20 detections of one day: one fire at the tile centre on day t, and
+        # always one far away (so no day is an outage)
+        rows = [{"latitude": 45.0, "longitude": -100.0, "satellite": "N20", "frp": 5.0, "scan": 0.4, "track": 0.4}]
+        if day == dt.date(2026, 11, 12):
+            rows.append({"latitude": lat, "longitude": lon, "satellite": "N20", "frp": 50.0, "scan": 0.4, "track": 0.4})
         return pd.DataFrame(rows)
 
     flat = lambda value: np.full((64, 64), value, dtype=np.float32)
-    monkeypatch.setattr(sf.fire_points, "fire_points", points)
+    monkeypatch.setattr(sf, "_noaa20_day", day_points)
     monkeypatch.setattr(sf.terrain, "elevation", lambda grid: flat(1200.0))
     monkeypatch.setattr(sf._weather, "wind_layers", lambda grid, days: (flat(2.0), flat(-1.0)))
     monkeypatch.setattr(sf._weather, "weather_layer", lambda grid, var, days: flat({"tmmn": 280.0, "tmmx": 295.0, "sph": 0.004, "pr": 0.0, "erc": 60.0}[var]))
@@ -56,7 +59,6 @@ def test_inputs_in_channel_order_n20_only(stubbed):
     assert inputs.shape == (len(CHANNELS), 64, 64)
     fire_t = inputs[CHANNELS.index("fire_t")]
     assert fire_t[31, 31] == 1 and inputs[CHANNELS.index("fire_t1")].sum() == 0
-    # Only the N20 detection's FRP (50 MW), not the N21 one
     assert np.isclose(inputs[CHANNELS.index("frp_t")][31, 31], np.log1p(50.0))
     assert (inputs[CHANNELS.index("tmmx")] == 295.0).all() and (inputs[CHANNELS.index("wind_v")] == -1.0).all()
     assert info["weather_days"] == ["2026-11-10", "2026-11-11"] and info["detections"]["t"] == 1
@@ -79,12 +81,50 @@ def test_forecast_is_north_up_and_complete(stubbed):
 
 
 def test_failed_fire_detections_refuse_the_forecast(stubbed, monkeypatch):
-    def down(*args, **kwargs):
+    def down(day):
         raise sf.FirmsError("FIRMS is down")
 
-    monkeypatch.setattr(sf.fire_points, "fire_points", down)
+    monkeypatch.setattr(sf, "_noaa20_day", down)
     with pytest.raises(sf.ForecastUnavailable, match="FIRMS is down"):
         sf.forecast(37.0, -119.0, fire_day=dt.date(2026, 11, 12))
+
+
+def test_noaa20_outage_day_refuses_instead_of_meaning_no_fire(monkeypatch):
+    # FIRMS covers the day but NOAA-20 has no detections anywhere in the US (like 2023-07-19..22)
+    monkeypatch.setattr(sf.fire_points, "sources_for", lambda day, family: ["VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT"])
+    monkeypatch.setattr(sf, "fetch_area", lambda *a, **k: pd.DataFrame(columns=["latitude", "longitude", "acq_date", "acq_time", "satellite", "confidence"]))
+    sf._day_cache.clear()
+    with pytest.raises(sf.ForecastUnavailable, match="data gap"):
+        sf._noaa20_day(dt.date(2026, 11, 12))
+
+
+def test_no_noaa20_source_for_the_day_refuses(monkeypatch):
+    # Only NOAA-21 covers the day: the model was trained on NOAA-20, so no forecast
+    monkeypatch.setattr(sf.fire_points, "sources_for", lambda day, family: ["VIIRS_NOAA21_NRT"])
+    with pytest.raises(sf.ForecastUnavailable, match="No NOAA-20"):
+        sf._noaa20_day(dt.date(2026, 11, 12))
+
+
+def test_gridmet_latest_day_failure_is_a_note_not_a_crash(stubbed, monkeypatch):
+    def broken(*args, **kwargs):
+        raise sf.gridmet.GridmetError("THREDDS down")
+
+    monkeypatch.setattr(sf.gridmet, "latest_day", broken)
+    result = sf.forecast(37.0, -119.0, fire_day=dt.date(2026, 11, 12))
+    assert any("THREDDS down" in note for note in result["notes"])
+    assert result["inputs"]["weather_days"] == ["2026-11-10", "2026-11-11"]
+
+
+def test_likely_mask_agrees_with_the_pixel_count(stubbed):
+    result = sf.forecast(37.0, -119.0, fire_day=dt.date(2026, 11, 12))
+    assert int(np.array(result["likely"]).sum()) == result["forecast_pixels"]
+
+
+def test_forecast_cache_is_bounded(stubbed, monkeypatch):
+    monkeypatch.setattr(sf, "CACHE_MAX_ENTRIES", 3)
+    for step in range(6):
+        sf.forecast(37.0 + step * 0.7, -119.0, fire_day=dt.date(2026, 11, 12))
+    assert len(sf._cache) <= 3
 
 
 @pytest.mark.network

@@ -123,7 +123,7 @@ No pixel is "uncertain": FIRMS has no cloud mask, so a cloudy pixel looks like n
 | R2 | Tile sampler and dataset builder (`training/build_spread_dataset.py`), quick sample first, then full | data agent |
 | R3 | Model v2, training loop, baselines, evaluation (`training/`), built and tested on the quick sample while R2 runs | training agent |
 | R4 | Full training runs (after R2 finishes; one at a time) | training agent |
-| R5 | Independent review of R1 to R4 and the live forecast | reviewer (running) |
+| R5 | Independent review of R1 to R4 and the live forecast | Done: no critical findings; test IoUs recomputed and matched; 1 major + 5 minor fixed (see Review) |
 | R6 | Test-split scoring of the winner and the baselines, then report to the team | Done: passed (see Results) |
 | Gate | If the goal is met: build the API and UI (old plan steps 4 to 6) with the new model | |
 
@@ -155,6 +155,29 @@ compared with them.
 Shipped as `models/spread_v2/` with `backend/spread_forecast.py` and the map overlay
 (`frontend/src/components/SpreadForecast.jsx`). Live inputs match stored training tiles to float16
 rounding (`tests/test_spread_forecast.py`).
+
+## Review (R5, 2026-11-13)
+
+The reviewer recomputed the test IoUs independently (0.305 / 0.239; live mix 0.224 / 0.162). They
+found no leakage and confirmed the year splits, the train-only stats, physical augmentation, and
+val-only selection. They rebuilt 12 test tiles offline through the live path with zero difference
+after float16 rounding, and confirmed the map orientation.
+
+Fixed after the review:
+- **Major:** a NOAA-20 outage day, or a day only NOAA-21 covers, was read as "no fire". The live
+  path now fetches NOAA-20 nationwide per day, the same box as training, and refuses on an empty day.
+- gridMET's latest-day lookup failing is now a note instead of an HTTP 500.
+- The legend described IoU as "overlapped X% of the fire area". It now names the overlap score and
+  quotes the natural-mix numbers (0.22 vs 0.16) alongside growing fires (0.32 vs 0.26).
+- Drawn "likely" pixels now come from the same unrounded mask as the km² count.
+- The forecast cache is bounded and evicts expired entries.
+- Models trained on a subset of channels can now be served (select_channels).
+
+Known and left as is:
+- Training's gap check only catches days with zero detections, not days missing one NOAA-20 pass
+  (2018-07-19, 2023-10-01; about 100 tiles).
+- Wind adds little measurable skill (the downwind baseline scores the same as upwind).
+- The bootstrap intervals aren't clustered by fire, so they're optimistic.
 
 ## Rules for builders
 

@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 from backend import fire_points, gridmet, terrain
-from backend.firms_client import FirmsError
+from backend.firms_client import US_BOUNDS, FirmsError, fetch_area
 from backend.gridmet_bulk import Bulk
 from backend.spread_grid import TileGrid
 from backend.spread_model_v2 import (
@@ -34,6 +34,7 @@ from backend.spread_model_v2 import (
     WEATHER_OFFSETS,
     load_run,
     predict,
+    select_channels,
 )
 
 REPO = Path(__file__).resolve().parents[1]
@@ -43,12 +44,24 @@ MODEL_DIR = REPO / "models" / "spread_v2"
 # within about 3 hours, so a UTC day is complete by about 03:00 UTC the next day.
 DAY_COMPLETE_HOUR_UTC = 4
 CACHE_SECONDS = 30 * 60
+CACHE_MAX_ENTRIES = 200  # forecasts kept in memory (each holds ~8k numbers)
+DAY_CACHE_SECONDS = 10 * 60  # nationwide NOAA-20 detections of a recent day (NRT can still grow)
 
-# docs/spread_v2_test_results.txt, "all" rows (4,000 test tiles, 2024-2025)
+# docs/spread_v2_test_results.txt (4,000 test tiles from the 2024-2025 fire seasons, never used for
+# training or selection). The test sample is half "growing" fires and half small ones; "all_fires"
+# re-weights it to the natural mix of fires (most are small and short-lived), which is what users
+# clicking live fires see. IoU = overlap score: pixels both forecast and burning, divided by pixels
+# either forecast or burning.
 TEST_SCORES = {
-    "model": {"iou": 0.305, "precision": 0.459, "recall": 0.476, "new_fire_recall": 0.140, "new_fire_precision": 0.332},
-    "persistence": {"iou": 0.239, "precision": 0.334, "recall": 0.456},
     "test_period": "2024-2025 fire seasons",
+    "all_fires": {
+        "model": {"iou": 0.224, "precision": 0.443, "recall": 0.312, "new_fire_recall": 0.067, "new_fire_precision": 0.324},
+        "persistence": {"iou": 0.162, "precision": 0.219, "recall": 0.382},
+    },
+    "growing_fires": {
+        "model": {"iou": 0.318, "precision": 0.461, "recall": 0.507, "new_fire_recall": 0.156, "new_fire_precision": 0.333},
+        "persistence": {"iou": 0.258, "precision": 0.364, "recall": 0.470},
+    },
 }
 
 
@@ -69,6 +82,8 @@ class _LiveWeather(Bulk):
 _weather = _LiveWeather()
 _cache = {}
 _cache_lock = threading.Lock()
+_day_cache = {}  # (FIRMS source, day) -> (fetched_at, NOAA-20 detections over the contiguous US)
+_day_lock = threading.Lock()
 
 
 def latest_fire_day(now=None):
@@ -78,12 +93,48 @@ def latest_fire_day(now=None):
     return now.date() - dt.timedelta(days=lag)
 
 
+def _noaa20_source(day):
+    """The FIRMS NOAA-20 source covering `day` (archive if it has it, else near-real-time)."""
+    noaa20 = [source for source in fire_points.sources_for(day, "VIIRS") if "NOAA20" in source]
+    if not noaa20:
+        raise ForecastUnavailable(f"No NOAA-20 fire data covers {day.isoformat()} yet.")
+    return noaa20[0]
+
+
+def _noaa20_day(day):
+    """Every NOAA-20 detection over the contiguous US on one UTC day, the box the training data used.
+
+    Fetched once per day and shared by every forecast. A day with no NOAA-20 detections anywhere
+    in the US is a data outage (it happened on 2023-07-19..22), not a quiet day: training skipped
+    such days, so the forecast refuses instead of reading the gap as "no fire".
+    """
+    source = _noaa20_source(day)
+    key = (source, day)
+    with _day_lock:
+        hit = _day_cache.get(key)
+        if hit and (source.endswith("_SP") or time.time() - hit[0] < DAY_CACHE_SECONDS):
+            return hit[1]
+    west, south, east, north = (float(value) for value in US_BOUNDS.split(","))
+    table = fire_points._tidy(fetch_area(source, US_BOUNDS, days=1, date=day), source, day, south, west, north, east)
+    table = table[table["satellite"].isin(VIIRS_SATELLITES)]
+    if len(table) == 0:
+        raise ForecastUnavailable(
+            f"NOAA-20 reported no fires anywhere in the US on {day.isoformat()}, which means a data gap, not a quiet day."
+        )
+    with _day_lock:
+        for stale in [k for k, (at, _) in _day_cache.items() if not k[0].endswith("_SP") and time.time() - at > DAY_CACHE_SECONDS]:
+            del _day_cache[stale]
+        _day_cache[key] = (time.time(), table)
+    return table
+
+
 def _viirs_points(grid, day):
     """NOAA-20 detections on `day` in the tile's box padded like the dataset builder."""
     south, west, north, east = grid.bounds
     pad = fire_points.QUERY_PAD_DEG
-    table = fire_points.fire_points(south - pad, west - pad, north + pad, east + pad, day, family="VIIRS")
-    return table[table["satellite"].isin(VIIRS_SATELLITES)]
+    table = _noaa20_day(day)
+    keep = table["latitude"].between(south - pad, north + pad) & table["longitude"].between(west - pad, east + pad)
+    return table[keep]
 
 
 def _frp_layer(grid, points):
@@ -105,8 +156,13 @@ def build_inputs(lat, lon, fire_day, weather_days=None):
     """
     grid = TileGrid.around(lat, lon)
     fire_days = {offset: fire_day + dt.timedelta(days=offset) for offset in (0, -1, -2)}
+    weather_note = None
     if weather_days is None:
-        weather_days = live_weather_days(fire_day)
+        try:
+            weather_days = live_weather_days(fire_day)
+        except Exception as error:  # gridMET unreachable: try the training days; failures become NaN below
+            weather_days = [fire_day + dt.timedelta(days=offset) for offset in WEATHER_OFFSETS]
+            weather_note = f"Couldn't check gridMET's latest day ({type(error).__name__}: {error})."
 
     jobs = {f"fire_{offset}": (lambda day=day: _viirs_points(grid, day)) for offset, day in fire_days.items()}
     jobs["elevation"] = lambda: terrain.elevation(grid)
@@ -151,6 +207,7 @@ def build_inputs(lat, lon, fire_day, weather_days=None):
         "weather_days": [day.isoformat() for day in weather_days],
         "pdsi_pentad": pdsi[1].get("pentad_date") if pdsi is not None else None,
         "missing_layers": {name: message for name, message in errors.items()},
+        "weather_note": weather_note,
     }
     return grid, inputs, info
 
@@ -176,7 +233,8 @@ def forecast(lat, lon, fire_day=None):
 
     grid, inputs, info = build_inputs(lat, lon, fire_day)
     model, stats, manifest = load_run(MODEL_DIR)
-    probability = predict(inputs[None], model, stats, tuple(manifest["channels"]))[0]
+    channels = tuple(manifest["channels"])
+    probability = predict(select_channels(inputs[None], channels), model, stats, channels)[0]
     threshold = float(manifest["threshold"])
     forecast_mask = probability >= threshold
     today = inputs[CHANNELS.index("fire_t")] == 1
@@ -187,6 +245,8 @@ def forecast(lat, lon, fire_day=None):
         notes.append(f"NOAA-20 saw no fire in this area on {fire_day.isoformat()}, so the forecast starts from no fire.")
     if weather_lag > -WEATHER_OFFSETS[-1]:
         notes.append(f"gridMET weather is {weather_lag} days old (the model was trained on 1-day-old weather).")
+    if info["weather_note"]:
+        notes.append(info["weather_note"])
     if info["missing_layers"]:
         notes.append("Some inputs couldn't be loaded and were filled with training averages: " + ", ".join(info["missing_layers"]) + ".")
 
@@ -198,6 +258,9 @@ def forecast(lat, lon, fire_day=None):
         "size": grid.size,
         # Rows run north to south, columns west to east, for drawing on a map
         "probability": np.round(grid.to_north_up(probability), 3).tolist(),
+        # 1 where the model forecasts fire (probability >= threshold), decided before rounding, so
+        # the drawn pixels always agree with forecast_pixels
+        "likely": grid.to_north_up(forecast_mask).astype(int).tolist(),
         "fire_today": grid.to_north_up(today).astype(int).tolist(),
         "threshold": threshold,
         "forecast_pixels": int(forecast_mask.sum()),
@@ -210,5 +273,10 @@ def forecast(lat, lon, fire_day=None):
         "notes": notes,
     }
     with _cache_lock:
-        _cache[key] = (time.time(), result)
+        now = time.time()
+        for stale in [k for k, (at, _) in _cache.items() if now - at > CACHE_SECONDS]:
+            del _cache[stale]
+        while len(_cache) >= CACHE_MAX_ENTRIES:
+            del _cache[min(_cache, key=lambda k: _cache[k][0])]
+        _cache[key] = (now, result)
     return result

@@ -211,9 +211,18 @@ forecast for the next day over the 64 × 64 pixel area around the fire (about 64
 - **Inputs, built live:** NOAA-20 VIIRS fire on the last three days (FIRMS), gridMET weather and
   drought, and AWS terrain. They're built with the same code as the training tiles, and
   `tests/test_spread_forecast.py` checks that they match.
-- **Accuracy:** on the 2024–2025 fire seasons, which it never saw, it overlapped 30.5% of the
-  next day's fire area (IoU), against 23.9% for assuming tomorrow looks like today. It caught 14%
-  of new spread. Full scores are in `docs/spread_v2_test_results.txt`.
+- **Accuracy:** tested on the 2024–2025 fire seasons, which it never saw. Its overlap score with
+  what burned the next day (IoU, 0–1) beat assuming tomorrow looks like today:
+
+  | Fires | Model | Tomorrow = today |
+  |---|---|---|
+  | Natural mix (mostly small fires) | 0.22 | 0.16 |
+  | Larger, growing fires | 0.32 | 0.26 |
+
+  About 44% of the area it marks as likely did burn. On growing fires it caught 16% of new spread.
+  Full scores are in `docs/spread_v2_test_results.txt`.
+- **No forecast without fire data:** if NOAA-20 detections can't be loaded, or show a data gap,
+  the API returns 503 instead of a misleading map.
 - **How it was built:** `docs/spread_retrain_plan.md` is the plan and evidence.
   - `training/build_spread_dataset.py` builds the tiles. It needs the gridMET yearly files from
     `python -m backend.gridmet_bulk download`, about 6 GB.
