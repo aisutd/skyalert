@@ -35,7 +35,7 @@ npm install                        # first time only
 npm run dev                        # prints the address to open
 ```
 
-Wait for Terminal 1 to print `Uvicorn running on http://127.0.0.1:8000`, then open the address Terminal 2 printed (usually **http://localhost:5173**). Full details and troubleshooting are below.
+Wait for Terminal 1 to print `Uvicorn running on http://127.0.0.1:8000`, then open the address Terminal 2 printed (usually **http://localhost:5173**). The badge at the top right should say **Live data**. If a banner says it's showing sample data, the backend isn't reachable. Full details and troubleshooting are below.
 
 ## Live prototype (single page, no npm)
 
@@ -67,8 +67,8 @@ SkyAlert has two parts that run at the same time:
 
 ### 1. Install the tools (once per computer)
 
-- **Python 3.10 or newer** (tested on 3.12). Check with `python3 --version`.
-- **Node.js 20.19+ or 22.12+** (needed by Vite). Check with `node --version`.
+- **Python 3.10 or newer** (tested on 3.12 and 3.13). Check with `python3 --version`.
+- **Node.js 20.19+ or 22.12+** (needed by Vite; also works on 25). Check with `node --version`.
 - **Git**
 
 ### 2. Get the code
@@ -159,10 +159,10 @@ This fetches and cleans the fires and prints the first few rows. No server or br
 | Problem | Fix |
 |---|---|
 | `FIRMS_MAP_KEY is not set` | Do step 3: create `.env` in the `skyalert` folder with your key. |
-| Dashboard opens but shows "Couldn't load stats" or no fire dots | The backend isn't running. Start Terminal 1 and refresh. |
+| Banner says "Live data isn't available… so this is sample data" | The backend isn't running or crashed. Start Terminal 1, wait for the Uvicorn line, then refresh. |
 | `ModuleNotFoundError: No module named 'backend'` | You're inside the `backend/` folder. Run `cd ..` to get back to `skyalert`, then `python -m backend.dashboard`. |
 | `python dashboard.py` says "No such file" | The server moved to `backend/`. Use `python -m backend.dashboard` from the `skyalert` folder. |
-| Map shows a 502 error for fire detections | The frontend can't reach the backend. Start Terminal 1 (or check it didn't crash), wait for the Uvicorn line, then refresh. |
+| `http://127.0.0.1:5173` doesn't load | Vite listens on `localhost` (IPv6), not `127.0.0.1`. Use **http://localhost:5173**. |
 | `Address already in use` (port 8000 or 5173) | The backend or frontend is already running in another terminal. Use that one or stop it first. |
 | `npm run dev` complains about the Node version | Install Node.js 20.19+ or 22.12+. |
 | Prototype shows "Live data isn't available… sample data" | The backend isn't running, or the page was opened as a file. Start the backend and open http://127.0.0.1:8000/prototype/. |
