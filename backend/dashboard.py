@@ -1,3 +1,4 @@
+import datetime as dt
 import threading
 import time
 
@@ -84,10 +85,21 @@ def fire_context(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, 
 # (models/spread_v2) expects fire on the next day, around the clicked fire. Built from NOAA-20 fire
 # detections (FIRMS), gridMET weather and AWS terrain (backend/spread_forecast.py)
 @app.get("/api/spread-forecast")
-def spread_forecast_endpoint(lat: float = Query(ge=24, le=50), lon: float = Query(ge=-125, le=-66)):
-    """Next-day fire spread forecast for the 64 x 64 pixel tile around one spot."""
+def spread_forecast_endpoint(
+    lat: float = Query(ge=24, le=50),
+    lon: float = Query(ge=-125, le=-66),
+    day: dt.date | None = Query(None, description="Start from fires seen on this past UTC day (default: the latest complete day)"),
+):
+    """Next-day fire spread forecast for the 64 x 64 pixel tile around one spot.
+
+    With `day`, the forecast starts from that past day and also returns what actually burned
+    the next day, so the forecast can be checked (used by the map's past-fire examples).
+    """
+    latest = spread_forecast.latest_fire_day()
+    if day is not None and not (dt.date(2018, 4, 3) <= day <= latest):
+        raise HTTPException(status_code=422, detail=f"day must be between 2018-04-03 (NOAA-20 archive) and {latest.isoformat()}")
     try:
-        return spread_forecast.forecast(lat, lon)
+        return spread_forecast.forecast(lat, lon, fire_day=day)
     except spread_forecast.ForecastUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from None
 

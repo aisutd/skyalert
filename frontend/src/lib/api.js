@@ -46,7 +46,8 @@ export function getFireContext(lat, lon) {
   return getJson(`/fire-context?lat=${lat}&lon=${lon}`)
 }
 
-// Next-day spread forecast around one fire, for the map overlay (backend/spread_forecast.py)
-export function getSpreadForecast(lat, lon) {
-  return getJson(`/spread-forecast?lat=${lat}&lon=${lon}`)
+// Next-day spread forecast around one fire, for the map overlay (backend/spread_forecast.py).
+// day (optional, "YYYY-MM-DD"): start from a past day; the answer then also says what actually burned.
+export function getSpreadForecast(lat, lon, day = null) {
+  return getJson(`/spread-forecast?lat=${lat}&lon=${lon}${day ? `&day=${day}` : ''}`)
 }

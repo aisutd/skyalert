@@ -179,6 +179,28 @@ Known and left as is:
 - Wind adds little measurable skill (the downwind baseline scores the same as upwind).
 - The bootstrap intervals aren't clustered by fire, so they're optimistic.
 
+## Demo examples (2026-11-13)
+
+The map's "Past fire examples" use `?day=` on `/api/spread-forecast` to start from a past day. The
+API then returns what NOAA-20 saw on the forecast day and that forecast's own scores.
+
+The four examples come from the **test** seasons (2024–2025), which the model never trained on or
+was chosen with. They were picked as the test tiles where the model caught the most new spread and
+beat persistence: of 105 such tiles, the top-ranked by spread caught, de-duplicated by fire. They
+show the model **at its best**:
+
+| Example | Fire day | Model IoU | Persistence IoU | New ground caught |
+|---|---|---|---|---|
+| Grant County, OR | 2024-09-04 | 0.60 | 0.44 | 96 of 231 px |
+| Adams County, ID | 2024-09-08 | 0.37 | 0.26 | 62 of 295 px |
+| Coconino County, AZ | 2025-07-28 | 0.48 | 0.39 | 38 of 139 px |
+| San Luis Obispo County, CA | 2025-08-11 | 0.54 | 0.36 | 21 of 26 px |
+
+What to tell judges: pooled over pixels the model clearly beats persistence, because it does well
+on large, spreading fires. **Tile by tile** it beats persistence on only 28% of growing test fires
+(median IoU 0.08 vs 0.13), since on many smaller fires it forecasts a shrinkage that doesn't
+happen. The legend always shows the honest overall numbers next to the example.
+
 ## Rules for builders
 
 - Never guess a unit, variable name, scale factor, or orientation. Reuse the verified backend

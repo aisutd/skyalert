@@ -250,6 +250,31 @@ def forecast(lat, lon, fire_day=None):
     if info["missing_layers"]:
         notes.append("Some inputs couldn't be loaded and were filled with training averages: " + ", ".join(info["missing_layers"]) + ".")
 
+    # For a past day, what NOAA-20 actually saw on the forecast day, drawn the same way as the
+    # training labels, and how this one forecast scored against it
+    actual, check = None, None
+    forecast_day = fire_day + dt.timedelta(days=1)
+    if forecast_day <= latest_fire_day():
+        try:
+            burned = fire_points.footprint_mask(grid, _viirs_points(grid, forecast_day), FIRE_FOOTPRINT_SCALE) == 1
+        except Exception as error:  # the forecast still stands without the check
+            notes.append(f"Couldn't load what burned on {forecast_day.isoformat()} ({type(error).__name__}).")
+        else:
+            actual = grid.to_north_up(burned).astype(int).tolist()
+            new = burned & ~today
+
+            def overlap(guess):
+                union = (guess | burned).sum()
+                return round(float((guess & burned).sum() / union), 3) if union else None
+
+            check = {
+                "burned_pixels": int(burned.sum()),
+                "new_fire_pixels": int(new.sum()),
+                "new_fire_caught_pixels": int((forecast_mask & new).sum()),
+                "model_iou": overlap(forecast_mask),
+                "persistence_iou": overlap(today),
+            }
+
     south, west, north, east = grid.bounds
     result = {
         "fire_day": fire_day.isoformat(),
@@ -262,6 +287,9 @@ def forecast(lat, lon, fire_day=None):
         # the drawn pixels always agree with forecast_pixels
         "likely": grid.to_north_up(forecast_mask).astype(int).tolist(),
         "fire_today": grid.to_north_up(today).astype(int).tolist(),
+        # Past days only: what actually burned on forecast_day (north-up), and this forecast's scores
+        "actual": actual,
+        "check": check,
         "threshold": threshold,
         "forecast_pixels": int(forecast_mask.sum()),
         "fire_today_pixels": int(today.sum()),

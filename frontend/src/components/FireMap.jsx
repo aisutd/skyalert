@@ -6,7 +6,7 @@ import { densityWeights } from '../lib/heatWeights.js'
 import { getSpreadForecast } from '../lib/api.js'
 import { loadSoundSetting, playSound, saveSoundSetting } from '../lib/sound.js'
 import FirePopup from './FirePopup.jsx'
-import { SpreadLegend, SpreadOverlay } from './SpreadForecast.jsx'
+import { SpreadExamples, SpreadLegend, SpreadOverlay } from './SpreadForecast.jsx'
 
 const CENTER = [39, -98]
 const ZOOM_START = 4
@@ -112,6 +112,9 @@ export default function FireMap({ fires, error, theme, safeTop, visible, onOpenA
   // Next-day spread forecast for one fire: { status: 'loading' | 'ready' | 'error', data, error }
   const [spread, setSpread] = useState(null)
   const spreadRequest = useRef(0) // ignore answers to forecasts that were replaced or closed
+  // Which forecast layers are drawn (the legend's checkboxes)
+  const [spreadShow, setSpreadShow] = useState({ today: true, forecast: true, actual: true })
+  const toggleSpreadLayer = useCallback((name) => setSpreadShow((show) => ({ ...show, [name]: !show[name] })), [])
 
   // trigger: the dot's element when opened from the keyboard, so focus can go back to it
   const select = useCallback((fire, element, fromKeyboard) => {
@@ -132,15 +135,16 @@ export default function FireMap({ fires, error, theme, safeTop, visible, onOpenA
     if (current.trigger && document.contains(current.trigger)) current.trigger.focus({ preventScroll: true })
   }, [])
 
-  // "Forecast next-day spread" in the popup: close the popup so the map is visible, then load it
+  // "Forecast next-day spread" in the popup (or a past-fire example): close the popup so the map
+  // is visible, then load it. fire.day is set only for past examples.
   const forecastSpread = useCallback(
     (fire) => {
       const request = ++spreadRequest.current
       close()
-      setSpread({ status: 'loading', data: null, error: null })
-      getSpreadForecast(fire.latitude, fire.longitude)
-        .then((data) => request === spreadRequest.current && setSpread({ status: 'ready', data, error: null }))
-        .catch((err) => request === spreadRequest.current && setSpread({ status: 'error', data: null, error: err.message }))
+      setSpread({ status: 'loading', data: null, error: null, example: fire.example ?? null })
+      getSpreadForecast(fire.latitude, fire.longitude, fire.day ?? null)
+        .then((data) => request === spreadRequest.current && setSpread((s) => ({ ...s, status: 'ready', data, error: null })))
+        .catch((err) => request === spreadRequest.current && setSpread((s) => ({ ...s, status: 'error', data: null, error: err.message })))
     },
     [close]
   )
@@ -200,7 +204,8 @@ export default function FireMap({ fires, error, theme, safeTop, visible, onOpenA
       >
         <AttributionControl position="bottomleft" />
         <TileLayer key={theme} url={TILES[theme]} attribution={TILE_ATTRIBUTION[theme]} />
-        {fires && layer === 'dots' && <FireDots fires={fires} onSelect={select} dotToFire={dotToFire} />}
+        {/* Today's dots are hidden while a past example is shown: they're from a different day */}
+        {fires && layer === 'dots' && !spread?.example && <FireDots fires={fires} onSelect={select} dotToFire={dotToFire} />}
         {fires && layer === 'heat' && <HeatLayer fires={fires} />}
         {selected && (
           <CircleMarker
@@ -210,7 +215,7 @@ export default function FireMap({ fires, error, theme, safeTop, visible, onOpenA
             interactive={false}
           />
         )}
-        {spread?.data && <SpreadOverlay forecast={spread.data} theme={theme} />}
+        {spread?.data && <SpreadOverlay forecast={spread.data} theme={theme} show={spreadShow} />}
         <MapClick onClick={close} />
       </MapContainer>
 
@@ -252,7 +257,12 @@ export default function FireMap({ fires, error, theme, safeTop, visible, onOpenA
         </div>
       </div>
 
-      {spread && <SpreadLegend state={spread} onClose={closeSpread} />}
+      {spread && <SpreadLegend state={spread} onClose={closeSpread} show={spreadShow} onToggle={toggleSpreadLayer} />}
+
+      <SpreadExamples
+        active={spread?.example?.id ?? null}
+        onPick={(example) => forecastSpread({ latitude: example.lat, longitude: example.lon, day: example.day, example })}
+      />
 
       {map && selected && (
         <FirePopup

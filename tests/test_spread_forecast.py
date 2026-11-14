@@ -145,3 +145,28 @@ def test_live_inputs_match_the_training_tiles():
             assert np.array_equal(np.isnan(live[channel]), np.isnan(stored[channel])), name
             finite = np.isfinite(stored[channel])
             assert np.abs(live[channel][finite] - stored[channel][finite]).max() <= tolerance.get(name, 0.005), name
+
+
+def test_past_day_returns_what_actually_burned_and_scores_it(stubbed, monkeypatch):
+    # Pretend the forecast day (Nov 13) is complete, so the check can be made
+    monkeypatch.setattr(sf, "latest_fire_day", lambda now=None: dt.date(2026, 11, 20))
+    result = sf.forecast(37.0, -119.0, fire_day=dt.date(2026, 11, 12))
+    actual = np.array(result["actual"])
+    assert actual.shape == (64, 64)
+    # The stub has no fire near the tile on Nov 13, so nothing burned there and nothing was new
+    assert actual.sum() == 0 and result["check"]["burned_pixels"] == 0 and result["check"]["new_fire_pixels"] == 0
+    assert result["check"]["persistence_iou"] == 0.0
+
+
+def test_live_forecast_has_no_check(stubbed, monkeypatch):
+    monkeypatch.setattr(sf, "latest_fire_day", lambda now=None: dt.date(2026, 11, 12))
+    result = sf.forecast(37.0, -119.0, fire_day=dt.date(2026, 11, 12))
+    assert result["actual"] is None and result["check"] is None
+
+
+@pytest.mark.network
+def test_demo_example_matches_its_test_score():
+    """The Oregon demo example (2024 test season) scores what the held-out test computed for its tile."""
+    result = sf.forecast(44.2374468471588, -119.48264576420598, fire_day=dt.date(2024, 9, 4))
+    assert result["check"]["model_iou"] == pytest.approx(0.604, abs=0.005)
+    assert result["check"]["persistence_iou"] == pytest.approx(0.443, abs=0.005)

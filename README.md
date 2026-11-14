@@ -221,6 +221,10 @@ forecast for the next day over the 64 × 64 pixel area around the fire (about 64
 
   About 44% of the area it marks as likely did burn. On growing fires it caught 16% of new spread.
   Full scores are in `docs/spread_v2_test_results.txt`.
+- **Past fire examples** (top right of the map) replay held-out 2024–2025 fires: today's fire,
+  the forecast and what actually burned the next day, each with its own checkbox, plus that
+  forecast's score. They are the test fires where the model did best; see
+  `docs/spread_retrain_plan.md`, "Demo examples".
 - **No forecast without fire data:** if NOAA-20 detections can't be loaded, or show a data gap,
   the API returns 503 instead of a misleading map.
 - **How it was built:** `docs/spread_retrain_plan.md` is the plan and evidence.

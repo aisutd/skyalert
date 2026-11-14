@@ -2,11 +2,12 @@ import { useEffect } from 'react'
 import { useMap } from 'react-leaflet'
 import { X } from 'lucide-react'
 import L from '../lib/leaflet.js'
+import { SPREAD_EXAMPLES } from '../lib/spreadExamples.js'
 
 // The next-day spread forecast from /api/spread-forecast (backend/spread_forecast.py):
 // SpreadOverlay draws it on the map, SpreadLegend explains it.
 
-const CELL = 8 // canvas pixels per forecast pixel, so today's-fire outlines stay crisp
+const CELL = 10 // canvas pixels per forecast pixel, so outlines and markers stay crisp
 const POSSIBLE_FROM = 0.15 // below this probability nothing is drawn
 
 // "Likely" = at or above the model's threshold (chosen on 2023 fires to best match what burned)
@@ -14,15 +15,18 @@ const COLORS = {
   likely: [229, 72, 58],
   possible: [242, 160, 29],
 }
+const ACTUAL = '#1f6feb' // what actually burned on the forecast day (past examples)
 
-function drawForecast(forecast, outline) {
-  const { size, probability, likely, fire_today: today, threshold } = forecast
+// show: which layers to draw, { forecast, today, actual } (the legend's checkboxes)
+function drawForecast(forecast, outline, show) {
+  const { size, probability, likely, fire_today: today, actual, threshold } = forecast
   const canvas = document.createElement('canvas')
   canvas.width = size * CELL
   canvas.height = size * CELL
   const ctx = canvas.getContext('2d')
   for (let row = 0; row < size; row++) {
     for (let col = 0; col < size; col++) {
+      if (!show.forecast) break
       const p = probability[row][col]
       if (likely[row][col]) {
         ctx.fillStyle = `rgba(${COLORS.likely.join(',')}, 0.78)`
@@ -39,16 +43,26 @@ function drawForecast(forecast, outline) {
   // Today's fire: an outline inside each burning pixel
   ctx.strokeStyle = outline
   ctx.lineWidth = 2
-  for (let row = 0; row < size; row++) {
+  for (let row = 0; row < size && show.today; row++) {
     for (let col = 0; col < size; col++) {
       if (today[row][col]) ctx.strokeRect(col * CELL + 1.5, row * CELL + 1.5, CELL - 3, CELL - 3)
+    }
+  }
+  // Past examples: a blue square in each pixel that actually burned on the forecast day. Red with a
+  // blue square = forecast and burned; blue square alone = burned but not forecast.
+  if (actual && show.actual) {
+    ctx.fillStyle = ACTUAL
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        if (actual[row][col]) ctx.fillRect(col * CELL + 3, row * CELL + 3, CELL - 6, CELL - 6)
+      }
     }
   }
   return canvas.toDataURL('image/png')
 }
 
 // forecast rows run north to south and columns west to east, so the image maps straight onto its bounds
-export function SpreadOverlay({ forecast, theme }) {
+export function SpreadOverlay({ forecast, theme, show }) {
   const map = useMap()
   useEffect(() => {
     const { south, west, north, east } = forecast.bounds
@@ -57,7 +71,7 @@ export function SpreadOverlay({ forecast, theme }) {
     // Its own pane above the fire dots (overlayPane, z 400) and below popups and markers, so the
     // dots don't hide the forecast
     if (!map.getPane('spreadPane')) map.createPane('spreadPane').style.zIndex = 450
-    const image = L.imageOverlay(drawForecast(forecast, outline), bounds, {
+    const image = L.imageOverlay(drawForecast(forecast, outline, show), bounds, {
       pane: 'spreadPane',
       interactive: false,
       className: 'spread-overlay',
@@ -74,7 +88,7 @@ export function SpreadOverlay({ forecast, theme }) {
       map.removeLayer(image)
       map.removeLayer(frame)
     }
-  }, [map, forecast, theme])
+  }, [map, forecast, theme, show])
 
   // Bring the forecast area into view when a new forecast arrives
   useEffect(() => {
@@ -85,14 +99,36 @@ export function SpreadOverlay({ forecast, theme }) {
   return null
 }
 
-const formatDay = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+const formatDay = (iso) => {
+  const date = new Date(`${iso}T00:00:00`)
+  const options = { month: 'short', day: 'numeric' }
+  // Show the year for past examples
+  if (date.getFullYear() !== new Date().getFullYear()) options.year = 'numeric'
+  return date.toLocaleDateString('en-US', options)
+}
 const percent = (value) => `${Math.round(value * 100)}%`
 
-// state: { status: 'loading' | 'ready' | 'error', data, error }
-export function SpreadLegend({ state, onClose }) {
+// A legend row whose checkbox shows or hides that layer on the map
+function LayerKey({ swatch, checked, onChange, children }) {
+  return (
+    <li>
+      <label className="spread-key">
+        <input type="checkbox" checked={checked} onChange={onChange} />
+        <span className={`spread-swatch ${swatch}`} aria-hidden="true" />
+        {children}
+      </label>
+    </li>
+  )
+}
+
+// state: { status: 'loading' | 'ready' | 'error', data, error, example }
+// show / onToggle: which layers are drawn, toggled by the checkboxes
+export function SpreadLegend({ state, onClose, show, onToggle }) {
   const forecast = state.data
   const km2 = forecast ? forecast.pixel_km.north_south * forecast.pixel_km.east_west : 0
   const scores = forecast?.model.test_scores
+  const check = forecast?.check
+  const area = (pixels) => `${Math.round(pixels * km2)} km²`
 
   return (
     <section className="map-control spread-legend" aria-live="polite" aria-label="Next-day spread forecast">
@@ -102,6 +138,12 @@ export function SpreadLegend({ state, onClose }) {
           <X size={14} />
         </button>
       </header>
+
+      {state.example && (
+        <p className="spread-example">
+          Past fire: <strong>{state.example.label}</strong>. From the 2024–25 test seasons, which the model never saw.
+        </p>
+      )}
 
       {state.status === 'loading' && <p className="spread-muted">Building the forecast from satellite fire, weather and terrain data… (about 10 seconds)</p>}
 
@@ -113,22 +155,33 @@ export function SpreadLegend({ state, onClose }) {
             For <strong>{formatDay(forecast.forecast_day)}</strong>, from fires seen {formatDay(forecast.inputs.fire_days['t-2'])} – {formatDay(forecast.fire_day)}
           </p>
           <ul className="spread-keys">
-            <li>
-              <span className="spread-swatch likely" aria-hidden="true" />
-              Likely burning <span className="spread-num">{Math.round(forecast.forecast_pixels * km2)} km²</span>
-            </li>
-            <li>
+            <LayerKey swatch="today" checked={show.today} onChange={() => onToggle('today')}>
+              Burning on {formatDay(forecast.fire_day)} <span className="spread-num">{area(forecast.fire_today_pixels)}</span>
+            </LayerKey>
+            <LayerKey swatch="likely" checked={show.forecast} onChange={() => onToggle('forecast')}>
+              Forecast: likely burning <span className="spread-num">{area(forecast.forecast_pixels)}</span>
+            </LayerKey>
+            <li className="spread-key-sub">
               <span className="spread-swatch possible" aria-hidden="true" />
               Possible
             </li>
-            <li>
-              <span className="spread-swatch today" aria-hidden="true" />
-              Burning on {formatDay(forecast.fire_day)} <span className="spread-num">{Math.round(forecast.fire_today_pixels * km2)} km²</span>
-            </li>
+            {forecast.actual && (
+              <LayerKey swatch="actual" checked={show.actual} onChange={() => onToggle('actual')}>
+                Actually burned on {formatDay(forecast.forecast_day)} <span className="spread-num">{area(check.burned_pixels)}</span>
+              </LayerKey>
+            )}
           </ul>
           <p className="spread-muted">
             New spread forecast: {Math.round(forecast.new_fire_pixels * km2)} km² beyond today's fire.
           </p>
+          {check && (
+            <p className="spread-check">
+              <strong>How this forecast did:</strong> the fire spread to {area(check.new_fire_pixels)} of new ground, and
+              the model had forecast {area(check.new_fire_caught_pixels)} of it. Overlap score (IoU) with what burned:{' '}
+              {check.model_iou?.toFixed(2) ?? '–'}, against {check.persistence_iou?.toFixed(2) ?? '–'} for assuming the
+              fire stays where it was.
+            </p>
+          )}
           <p className="spread-accuracy">
             How good is it? Tested on 2024–25 fires it never saw, its overlap score with what actually burned the next
             day (IoU, 0–1) was {scores.all_fires.model.iou.toFixed(2)}, against {scores.all_fires.persistence.iou.toFixed(2)} for
@@ -146,6 +199,27 @@ export function SpreadLegend({ state, onClose }) {
           )}
         </>
       )}
+    </section>
+  )
+}
+
+// A short list of past fires (held-out test seasons) to show the forecast against what burned
+export function SpreadExamples({ active, onPick }) {
+  return (
+    <section className="map-control spread-examples" aria-label="Past fire examples">
+      <div className="popup-label">Past fire examples</div>
+      {SPREAD_EXAMPLES.map((example) => (
+        <button
+          key={example.id}
+          type="button"
+          className={`spread-example-button${active === example.id ? ' active' : ''}`}
+          aria-pressed={active === example.id}
+          onClick={() => onPick(example)}
+        >
+          <span>{example.label}</span>
+          <span className="spread-num">{formatDay(example.day)}</span>
+        </button>
+      ))}
     </section>
   )
 }
