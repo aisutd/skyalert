@@ -82,3 +82,27 @@ had all loaded. Dots in the overview's small map couldn't be clicked at all. Now
 - A dot clicked in the overview opens the map view on that fire.
 - Fires just over the border (FIRMS's box reaches into Canada and Mexico) have no gridMET weather; the
   forecast now says what share of its area used average weather when that's 25% or more.
+
+## Seeing the selected fire's forecast (2026-11-15, after user feedback: "zoom to forecast is still not clear")
+
+The first fix zoomed to the whole 64 km forecast area, where a small fire's one or two 1 km squares are about
+10 px across and sit under the 24 px numbered marker. Now:
+- **Focus on this fire.** `forecastFocus` (lib/spreadExamples.js) finds the clicked fire's own squares (burning,
+  likely or possible): the group nearest the centre, where squares up to 2 apart count as one fire. Other fires in
+  the 64 km area, such as farm burns a few km away, stay on the map but don't widen the view. It returns that
+  group plus a 2-square margin, at least 9 × 9 squares.
+- **Zoom the map in on it** flies to that focus area (max zoom 14), so each 1 km square is about 60–70 px.
+- **Once squares are at least 22 px on screen:**
+  - a 1 km grid and outline cover the focus area
+  - the selected marker moves onto a short stem just north of the squares, labelled "· forecast for {day}", so
+    it no longer covers them
+  - zooming back out puts it back on the fire
+- **Panel close-up:** it shows the same focus area, about 220 px wide and drawn at 2× resolution. The legend
+  amounts count what's in the close-up. The whole-area totals are on their own line, which names the dashed box.
+- **Sharp squares.** The "burning" frames and grid lines are now drawn on whole canvas pixels. Before, strokes
+  on half pixels blurred into grey bands when enlarged. This applies to the past-fire view too.
+
+Checked in Chrome, light and dark, on Yalobusha County, MS (adjacent squares) and Cavalier County, ND
+(scattered farm burns), plus the past-fire view. `forecastFocus` is checked on synthetic grids: a centre fire
+with distant burns, a 1-square vs 3-square gap, a large fire, an empty grid, an edge clamp, and the bounds
+maths.

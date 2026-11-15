@@ -1,27 +1,29 @@
 // One React Leaflet map under both layouts. The overview clips it to its slot, so the map view only widens the clip.
-import { Fragment, memo, useMemo } from 'react'
+import { Fragment, memo, useMemo, useState } from 'react'
 import L from 'leaflet'
-import { CircleMarker, ImageOverlay, MapContainer, Marker, Pane, Rectangle, SVGOverlay, TileLayer } from 'react-leaflet'
+import { CircleMarker, ImageOverlay, MapContainer, Marker, Pane, Rectangle, SVGOverlay, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { RISK } from '../lib/format.js'
 import { MODEL } from '../lib/model.js'
-import { US, heatURL } from '../lib/live.js'
+import { US, heatURL, shortDay } from '../lib/live.js'
 import { POINTS, WIND, rasterCells, sketchBounds, sketchToLatLng } from '../lib/sample.js'
-import { drawPast } from '../lib/spreadExamples.js'
+import { drawFocusGrid, drawPast, forecastFocus } from '../lib/spreadExamples.js'
 import { TILES } from './bits.jsx'
 
 const FireDots = memo(function FireDots({ fires }) {             // today's FIRMS detections; the map draws them on one canvas
   return fires.map((f, i) => <CircleMarker key={i} center={[f.latitude, f.longitude]} radius={3.5} pathOptions={{ color: '#FFFFFF', weight: 0.8, fillColor: '#E8452C', fillOpacity: 0.9 }} interactive={false} />)
 })
 
-function NumberedMarkers({ D, hz, sel, focus, onSelect }) {       // 1, 2, 3… with the place name beside each
+// 1, 2, 3… with the place name beside each. lift: you're zoomed in on the selected fire's forecast, so its marker
+// stands on a short stem just north of the forecast squares instead of covering them
+function NumberedMarkers({ D, hz, sel, focus, lift, onSelect }) {
   return D.items.map((it, i) => {
-    const on = i === sel
+    const on = i === sel, up = on && lift
     const icon = L.divIcon({
-      className: 'lm-mk' + (on ? ' on' : '') + (on && focus ? ' lm-focus' : ''),
-      iconSize: [24, 24], iconAnchor: [12, 12],
-      html: `<span class="lm-k">${i + 1}</span><span class="lm-lab">${it.name.replace(/</g, '&lt;')}</span>`,
+      className: 'lm-mk' + (on ? ' on' : '') + (on && focus && !up ? ' lm-focus' : '') + (up ? ' lm-up' : ''),
+      iconSize: [24, 24], iconAnchor: up ? [12, 44] : [12, 12],
+      html: `<span class="lm-k">${i + 1}</span><span class="lm-lab">${it.name.replace(/</g, '&lt;')}${up ? ` · forecast for ${lift.day}` : ''}</span>`,
     })
-    return <Marker key={`${hz}-${i}`} position={it.latlng || sketchToLatLng(hz, it.pos)} icon={icon} title={`${it.name}, ${RISK[it.risk]} ${D.live ? 'fire-weather' : 'predicted'} risk`} zIndexOffset={on ? 500 : 0} eventHandlers={{ click: () => onSelect(i) }} />
+    return <Marker key={`${hz}-${i}`} position={up ? lift.pos : it.latlng || sketchToLatLng(hz, it.pos)} icon={icon} title={`${it.name}, ${RISK[it.risk]} ${D.live ? 'fire-weather' : 'predicted'} risk`} zIndexOffset={on ? 500 : 0} eventHandlers={{ click: () => onSelect(i) }} />
   })
 }
 
@@ -76,29 +78,55 @@ function SpreadPast({ fc, layers, theme }) {                     // the spread m
 const RING = L.divIcon({ className: 'dot-ring', iconSize: [20, 20], iconAnchor: [10, 10] })
 const RING_PENDING = L.divIcon({ className: 'dot-ring pending', iconSize: [20, 20], iconAnchor: [10, 10] })
 
+// Once a forecast square (~1 km) is at least this many screen pixels tall you're "zoomed in close": the 1 km grid
+// shows around the fire and the selected marker steps off the squares
+const CLOSE_PX = 22
+function FireLayers({ s, act }) {                                // live fires (or the flood sample) inside the map, so it can follow the zoom
+  const map = useMap(), [zoom, setZoom] = useState(() => map.getZoom())
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) })
+  const { D, hz, layers } = s, it = D.items[s.sel]
+  const showFc = D.live && layers.predicted && D.modelReady
+  const fc = showFc && it && it.fc && it.fc.status === 'ok' ? it.fc : null
+  const area = useMemo(() => fc && forecastFocus(fc), [fc])
+  const gridURL = useMemo(() => fc && drawFocusGrid(fc, s.theme), [fc, s.theme])
+  let lift = null
+  if (fc) {
+    const [[south, west], [north, east]] = area.bounds, step = (north - south) / area.size
+    if (map.project([north - step, west], zoom).y - map.project([north, west], zoom).y >= CLOSE_PX) lift = { pos: [north, (west + east) / 2], day: shortDay(fc.forecast_day) }
+  }
+  return <>
+    {showFc && D.items.map((x, i) => {                           // the other fires' forecasts as a heat map
+      if (i === s.sel || !x.fc || x.fc.status !== 'ok') return null
+      const b = x.fc.bounds
+      return <ImageOverlay key={`fc${i}`} url={heatURL(x.fc)} bounds={[[b.south, b.west], [b.north, b.east]]} opacity={0.9} interactive={false} />
+    })}
+    {/* The selected fire: crisp pixels (likely, possible, its fire outlined), like the past-fire view. It sits above
+        the numbered markers (pane z 650 > markers 600), so a marker can't hide it */}
+    {D.live && <Pane name="fc-selected" style={{ zIndex: 650, pointerEvents: 'none' }}>
+      {fc && <SelectedForecast fc={fc} theme={s.theme} />}
+      {lift && <>
+        <ImageOverlay url={gridURL} bounds={area.bounds} interactive={false} />
+        <Rectangle bounds={area.bounds} pathOptions={{ color: s.theme === 'dark' ? '#FFFFFF' : '#25272C', weight: 1.5, fill: false, opacity: 0.8 }} interactive={false} />
+      </>}
+    </Pane>}
+    {D.live && layers.observed && <FireDots fires={s.fires} />}
+    {/* The dot under the pointer (it can be clicked) and the one you just clicked while it loads */}
+    {D.live && s.hoverDot && <Marker position={s.hoverDot} icon={RING} interactive={false} keyboard={false} />}
+    {D.live && s.pendingDot && <Marker position={s.pendingDot} icon={RING_PENDING} interactive={false} keyboard={false} zIndexOffset={1000} />}
+    {!D.live && <SampleRaster hz={hz} layers={layers} />}
+    <NumberedMarkers D={D} hz={hz} sel={s.sel} focus={s.focus} lift={lift} onSelect={act.select} />
+  </>
+}
+
 export default function MapStage({ s, act, setMap }) {   // attribution is our own .attr line, so Leaflet's is off
-  const { D, hz, mode, layers } = s
+  const { hz, mode } = s
   const modelMode = hz === 'fire' && mode === 'model', spreadMode = hz === 'fire' && mode === 'spread'
   return (
     <MapContainer className="lmap" ref={setMap} bounds={US} zoomControl={false} attributionControl={false} scrollWheelZoom={false} zoomSnap={0.25} zoomDelta={0.5} preferCanvas role="region" aria-label="Map of fires and fire-weather risk">
       <TileLayer key={s.theme} url={TILES[s.theme].url} maxZoom={16} />
       {spreadMode ? <SpreadPast fc={s.spFc} layers={s.spLayers} theme={s.theme} />
-        : modelMode ? <ModelTiles mSel={s.mSel} mLayers={s.mLayers} onSelectTile={act.selectTile} /> : <>
-        {D.live && layers.predicted && D.modelReady && D.items.map((it, i) => {
-          if (!it.fc || it.fc.status !== 'ok') return null
-          const b = it.fc.bounds, on = i === s.sel
-          // The selected fire: crisp pixels (likely, possible, its fire outlined), like the past-fire view; others: the heat map
-          // The selected forecast sits above the numbered markers (pane z 650 > markers 600), so a marker can't hide it
-          return on ? <Pane key={`fc${i}`} name="fc-selected" style={{ zIndex: 650, pointerEvents: 'none' }}><SelectedForecast fc={it.fc} theme={s.theme} /></Pane>
-            : <ImageOverlay key={`fc${i}`} url={heatURL(it.fc)} bounds={[[b.south, b.west], [b.north, b.east]]} opacity={0.9} interactive={false} />
-        })}
-        {D.live && layers.observed && <FireDots fires={s.fires} />}
-        {/* The dot under the pointer (it can be clicked) and the one you just clicked while it loads */}
-        {D.live && s.hoverDot && <Marker position={s.hoverDot} icon={RING} interactive={false} keyboard={false} />}
-        {D.live && s.pendingDot && <Marker position={s.pendingDot} icon={RING_PENDING} interactive={false} keyboard={false} zIndexOffset={1000} />}
-        {!D.live && <SampleRaster hz={hz} layers={layers} />}
-        <NumberedMarkers D={D} hz={hz} sel={s.sel} focus={s.focus} onSelect={act.select} />
-      </>}
+        : modelMode ? <ModelTiles mSel={s.mSel} mLayers={s.mLayers} onSelectTile={act.selectTile} />
+        : <FireLayers s={s} act={act} />}
     </MapContainer>
   )
 }

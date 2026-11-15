@@ -149,6 +149,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
 @keyframes lm-pulse { from { transform: scale(1); opacity: .9; } to { transform: scale(2.6); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .lm-mk.lm-focus::after { animation: none; transform: scale(1.6); } }
 .lm-mk:focus-visible .lm-k { outline: 2px solid var(--hz-deep); outline-offset: 3px; }
+.lm-mk.lm-up::before { content: ''; position: absolute; left: 11px; top: 29px; width: 2px; height: 15px; background: var(--ink); }   /* zoomed in on its forecast: the marker stands on a stem just north of the squares */
+.lm-mk.lm-up .lm-lab { background: var(--ink); color: var(--bg); }
 .lm-lab { position: absolute; left: 30px; top: 3px; white-space: nowrap; padding: 1px 7px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 90%, transparent); color: var(--ink); font: 650 12.5px/18px var(--f); box-shadow: 0 1px 2px rgba(0, 0, 0, .15); }
 
 /* =====================================================================
@@ -506,9 +508,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
 @media (prefers-reduced-motion: reduce) { .dot-ring.pending::after { animation: none; } }
 .fcb-wait { color: var(--muted); }
 /* The forecast close-up in the selected fire's panel */
-.fcb-row { display: grid; grid-template-columns: 132px 1fr; gap: 12px; align-items: start; }
 .fcb-zoom { margin: 0; display: grid; gap: 3px; }
-.fcb-zoom img { display: block; width: 132px; height: 132px; border-radius: 6px; border: 1px solid var(--line); image-rendering: pixelated; }
-.fcb-zoom figcaption { font-size: 10.5px; color: var(--muted); }
-.fcb-go { margin-top: 4px; padding: 5px 9px; border-radius: 8px; border: 1px solid var(--hz-deep); background: var(--surface); color: var(--hz-text); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.fcb-zoom img { display: block; width: 100%; max-width: 220px; height: auto; aspect-ratio: 1; border-radius: 6px; border: 1px solid var(--line); image-rendering: pixelated; }
+.fcb-zoom figcaption { font-size: 11px; color: var(--muted); }
+.fcb-go { justify-self: start; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--hz-deep); background: var(--surface); color: var(--hz-text); font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; }
 .fcb-go:hover { background: var(--hz-pale); }

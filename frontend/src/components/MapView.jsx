@@ -95,22 +95,21 @@ function ModelPanels({ s, act }) {
 function ForecastBox({ fc, theme, onZoom }) {                     // the spread model's forecast for the selected live fire
   const km2 = pixelKm2(fc), area = (px) => `${Math.round(px * km2)} km²`, T = MODEL.spread.test, f = fc.inputs.fire_days
   const close = useMemo(() => drawCloseup(fc, theme), [fc, theme])   // enlarged, so even a 1-square forecast is visible
+  const { size, counts, outside } = close.focus, day = shortDay(fc.forecast_day), was = shortDay(fc.fire_day)
   return (
     <div className="fcb pc" aria-label="Spread forecast">
-      <p className="fcb-h">Forecast for {shortDay(fc.forecast_day)}, from fires seen {shortDay(f['t-2'])}–{shortDay(f.t)}</p>
-      <div className="fcb-row">
-        <figure className="fcb-zoom">
-          <img src={close.url} alt={`Close-up of the forecast, ${close.size} by ${close.size} squares of about 1 km: likely burning ${area(fc.forecast_pixels)}, burning on ${shortDay(fc.fire_day)} ${area(fc.fire_today_pixels)}`} width="132" height="132" />
-          <figcaption>{close.size} × {close.size} squares, ~1 km each</figcaption>
-        </figure>
-        <ul className="fcb-k">
-          <li><i className="ly-g ly-sp-forecast" aria-hidden="true" />Likely<b>{area(fc.forecast_pixels)}</b></li>
-          <li><i className="ly-g ly-sp-possible" aria-hidden="true" />Possible (≥ 15%)</li>
-          <li><i className="ly-g ly-sp-today" aria-hidden="true" />On {shortDay(fc.fire_day)}<b>{area(fc.fire_today_pixels)}</b></li>
-          <li><button type="button" className="fcb-go" onClick={onZoom}>Zoom to forecast</button></li>
-        </ul>
-      </div>
-      <p className="fcb-s">New spread forecast: {area(fc.new_fire_pixels)} beyond the fire on {shortDay(fc.fire_day)}. Weather from gridMET, {fc.inputs.weather_days.map(shortDay).join('–')}.</p>
+      <p className="fcb-h">Forecast for {day}, from fires seen {shortDay(f['t-2'])}–{shortDay(f.t)}</p>
+      <figure className="fcb-zoom">
+        <img src={close.url} alt={`Close-up of the forecast, ${size} by ${size} squares of about 1 km: likely burning on ${day} ${area(counts.likely)}, possible ${area(counts.possible)}, burning on ${was} ${area(counts.today)}`} width="240" height="240" />
+        <figcaption>Close-up of this fire: {size} × {size} km, north up, one square ≈ 1 km{outside > 0 ? '. Other fires nearby are on the map.' : ''}</figcaption>
+      </figure>
+      <ul className="fcb-k">
+        <li><i className="ly-g ly-sp-forecast" aria-hidden="true" />Likely burning on {day}<b>{area(counts.likely)}</b></li>
+        <li><i className="ly-g ly-sp-possible" aria-hidden="true" />Possible (≥ 15% chance)<b>{area(counts.possible)}</b></li>
+        <li><i className="ly-g ly-sp-today" aria-hidden="true" />Burning on {was}<b>{area(counts.today)}</b></li>
+      </ul>
+      <button type="button" className="fcb-go" onClick={onZoom}>Zoom the map in on it</button>
+      <p className="fcb-s">Whole 64 × 64 km forecast area (dashed box): {area(fc.forecast_pixels)} likely, {area(fc.new_fire_pixels)} of it new, beyond the fire on {was}. Weather from gridMET, {fc.inputs.weather_days.map(shortDay).join('–')}.</p>
       {fc.notes.map((n) => <p className="fcb-s fcb-note" key={n}>{n}</p>)}
       <p className="fcb-s">Tested on {T.period} fires it never saw: overlap with what burned {T.all.iou.toFixed(2)} vs {T.all.stays.toFixed(2)} for “stays where it is” ({T.growing.iou.toFixed(2)} vs {T.growing.stays.toFixed(2)} on growing fires). A guide, not a certainty.</p>
     </div>

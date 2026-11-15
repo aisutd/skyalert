@@ -13,7 +13,7 @@ import { SAMPLE, sketchBounds, sketchToLatLng } from './lib/sample.js'
 import { MODEL, modelBounds } from './lib/model.js'
 import { US, buildLive, clusterAround } from './lib/live.js'
 import { getFires, getForecast, getModelStatus } from './lib/api.js'
-import { SPREAD_EXAMPLES } from './lib/spreadExamples.js'
+import { SPREAD_EXAMPLES, forecastFocus } from './lib/spreadExamples.js'
 
 const TOP_N = 5                                                   // the map view zooms to the 5 highest-index fires; the list still shows all of them
 const MOVE = 740                                                  // ms the shared pieces take to fly between layouts
@@ -372,15 +372,15 @@ export default function App() {
       loadSpread(i)
     },
     setSpLayer(k, v) { setSpLayers((l) => ({ ...l, [k]: v })) },
-    zoomToForecast() {                                            // fly to the selected fire's 64 × 64 forecast area
+    zoomToForecast() {                                            // fly in close on the selected fire's forecast squares (burning, likely, possible)
       const it = S.current.D.items[S.current.sel], m = mapRef.current
       if (busy.current || !m || !it || !it.fc || it.fc.status !== 'ok') return
-      const b = it.fc.bounds, { tl, br } = pads()
+      const { tl, br } = pads()
       ownMove.current = true                                      // the fire list stays as it is for this move
       clearTimeout(ownMoveT.current)
       ownMoveT.current = setTimeout(() => { ownMove.current = false }, 2000)
       m.once('moveend', () => { clearTimeout(ownMoveT.current); ownMoveT.current = setTimeout(() => { ownMove.current = false }, 80) })
-      m.flyToBounds([[b.south, b.west], [b.north, b.east]], { paddingTopLeft: tl, paddingBottomRight: br, duration: REDUCE.matches ? 0 : 0.85 })
+      m.flyToBounds(forecastFocus(it.fc).bounds, { paddingTopLeft: [tl[0], tl[1] + 44], paddingBottomRight: br, maxZoom: 14, duration: REDUCE.matches ? 0 : 0.85 })   // + room above for the marker's stem
     },
     selectTile(i) {
       if (busy.current) return
