@@ -2,6 +2,7 @@
 import { forwardRef } from 'react'
 import { MODEL, detectorTotals } from '../lib/model.js'
 import { measFor, seriesFor, selHeadline } from '../lib/live.js'
+import { SPREAD_EXAMPLES, longDay, pixelKm2 } from '../lib/spreadExamples.js'
 import { nf, pc0 } from '../lib/format.js'
 import { AnimText, Attr, Brand, Chart, DataBadge, HazardToggle, Kind, Layers, Legend, Risk, ThemeButton } from './bits.jsx'
 import { Back, Bars, Collapse } from './icons.jsx'
@@ -20,7 +21,7 @@ function TopRows({ s, act }) {                                    // brand row +
     </div>
     {s.hz === 'fire' && (
       <div className="msw pc" role="group" aria-label="What the map shows">
-        {[['live', 'Today, live'], ['model', 'Model on a past fire']].map(([k, l]) => <button key={k} type="button" data-mode={k} aria-pressed={s.mode === k} onClick={() => act.setMode(k)}>{l}</button>)}
+        {[['live', 'Today, live'], ['model', 'Detector, past fire'], ['spread', 'Spread, past fire']].map(([k, l]) => <button key={k} type="button" data-mode={k} aria-pressed={s.mode === k} onClick={() => act.setMode(k)}>{l}</button>)}
       </div>
     )}
   </>
@@ -81,15 +82,8 @@ function ModelPanels({ s, act }) {
     <section className="fp fp3 m-fp3" data-anchor=".mss" aria-label="Spread predictor">
       <div className="pbg" aria-hidden="true" />
       <div className="mss m-sp">
-        <div className="m-sp-h"><b>Spread predictor: tomorrow's fire, on past fires</b><span>Catches 52% of next-day fire, vs 27% for “tomorrow = today”. Not on the map: its test data has no locations.</span></div>
-        <div className="m-sp-row">
-          {MODEL.spread.rows.map((r, i) => (
-            <figure className="m-ex" key={i}>
-              <div className="m-ex-imgs"><img src={`/model_results/spr_${i + 1}_2.png`} alt="Forecast for day 2" loading="lazy" width="150" height="150" /><img src={`/model_results/spr_${i + 1}_3.png`} alt="What burned on day 2" loading="lazy" width="150" height="150" /></div>
-              <p><b>{r.kind.replace(' forecast', '')}: caught {r.caught} of {r.burned} km²</b><small>Forecast · what burned</small></p>
-            </figure>
-          ))}
-        </div>
+        <div className="m-sp-h"><b>Spread predictor: the next day's fire</b><span>On {MODEL.spread.test.period} fires it never saw, its forecast overlapped what burned {MODEL.spread.test.all.iou.toFixed(2)} (IoU), vs {MODEL.spread.test.all.stays.toFixed(2)} for “the fire stays where it is”; {MODEL.spread.test.growing.iou.toFixed(2)} vs {MODEL.spread.test.growing.stays.toFixed(2)} on larger, growing fires.</span></div>
+        <button type="button" className="cta m-sp-go" onClick={() => act.setMode('spread')}>See it on a past fire, next to what burned</button>
       </div>
     </section>
     <ZoomStack act={act} />
@@ -122,7 +116,7 @@ function LivePanels({ s, act }) {
       <dl className="selp-dl pc">
         {D.live ? <>
           <div><dt>Fire-weather index</dt><dd><AnimText className="fwi-n" value={it.fwi} /> / 100</dd></div>
-          <div><dt>Model: fire tomorrow</dt><dd>{it.fc && it.fc.status === 'ok' ? `${it.prob}% within 2 km` : s.modelStatus.ready ? 'Inputs unavailable' : 'Waiting for weights'}</dd></div>
+          <div><dt>Model: fire {D.forecastDay ? `on ${D.forecastDay}` : 'next day'}</dt><dd>{it.fc && it.fc.status === 'ok' ? `${it.prob}% within 2 km` : s.modelStatus.ready ? 'Inputs unavailable' : 'Waiting for weights'}</dd></div>
           <div><dt>{D.metricName}</dt><dd>{it.metric}</dd></div><div><dt>Evidence</dt><dd>{it.evidence}</dd></div>
         </> : <>
           <div><dt>Probability</dt><dd>{it.prob}%</dd></div><div><dt>Confidence</dt><dd>{it.conf}%</dd></div>
@@ -151,8 +145,65 @@ function LivePanels({ s, act }) {
   </>
 }
 
+function SpreadPanels({ s, act }) {                              // the spread model on a past fire: forecast vs what burned
+  const ex = SPREAD_EXAMPLES[s.spSel], fc = s.spFc, ok = fc && fc.status === 'ok' && fc.check
+  const k = ok ? fc.check : null, km2 = ok ? pixelKm2(fc) : 0, area = (px) => `${Math.round(px * km2)} km²`
+  const T = MODEL.spread.test
+  const caughtPct = ok && k.new_fire_pixels ? Math.round((k.new_fire_caught_pixels / k.new_fire_pixels) * 100) : 0
+  const lyr = (key, label) => <label className="ly"><input type="checkbox" data-splayer={key} checked={s.spLayers[key]} onChange={(e) => act.setSpLayer(key, e.target.checked)} /><span className={`ly-g ly-sp-${key}`} aria-hidden="true" /><span>{label}</span></label>
+  return <>
+    <section className="fp fp1" data-anchor=".num" aria-label="Summary">
+      <div className="pbg" aria-hidden="true" />
+      <TopRows s={s} act={act} />
+      <h2 className="pc">Our spread model on a past fire: {ex.label}, {longDay(ex.day)}</h2>
+      <hr className="pc" />
+      <div className="m-stats">
+        <div className="pr"><div className="num mv-num"><AnimText className="fn" value={ok ? caughtPct : 0} /><span className="pct">%</span></div><span className="pr-l" data-k="plabel">of the new ground it forecast</span></div>
+        <div className="pr pc"><div className="mv-num2">{ok ? `${k.model_iou.toFixed(2)} vs ${k.persistence_iou.toFixed(2)}` : '…'}</div><span className="pr-l">overlap with what burned, vs “stays where it is”</span></div>
+        <div className="pr pc"><div className="mv-num2">{T.all.iou.toFixed(2)} vs {T.all.stays.toFixed(2)}</div><span className="pr-l">overall, on {T.period} fires</span></div>
+      </div>
+      <hr className="pc" />
+      <fieldset className="lys pc"><legend className="sr-only">Map layers</legend>
+        {lyr('today', ok ? `Burning on ${longDay(fc.fire_day)}` : 'Burning on the fire day')}{lyr('forecast', 'Model: forecast for the next day')}{lyr('actual', ok ? `Actually burned on ${longDay(fc.forecast_day)}` : 'Actually burned the next day')}
+      </fieldset>
+    </section>
+    <section className="fp fp2" data-anchor=".selp-name" aria-label="Selected past fire">
+      <div className="pbg" aria-hidden="true" />
+      <div className="selp-top pc"><span className="kd">Spread model · past fire {s.spSel + 1}</span><span className="selp-id">{ex.day}</span></div>
+      <h3 className="selp-name" data-k="selname">{ok ? `Forecast ${area(k.new_fire_caught_pixels)} of ${area(k.new_fire_pixels)} of new ground` : fc && fc.status !== 'ok' ? 'Forecast unavailable' : 'Running the model…'}</h3>
+      {ok && <div className="m-meter pc" role="img" aria-label={`${caughtPct}% of the new ground forecast`}><i style={{ width: `${caughtPct}%` }} /></div>}
+      {ok ? (
+        <dl className="selp-dl pc">
+          <div><dt>Burning on the fire day</dt><dd>{area(fc.fire_today_pixels)}</dd></div><div><dt>Model: likely next day</dt><dd>{area(fc.forecast_pixels)}</dd></div>
+          <div><dt>Actually burned</dt><dd>{area(k.burned_pixels)}</dd></div><div><dt>Overlap (IoU)</dt><dd>{k.model_iou.toFixed(2)} vs {k.persistence_iou.toFixed(2)}</dd></div>
+        </dl>
+      ) : fc && fc.status !== 'ok' ? <p className="selp-win pc">{fc.note}</p> : null}
+      <p className="selp-win pc">Held-out fires where the model caught the most spread: its best cases. On larger, growing fires overall it scores {T.growing.iou.toFixed(2)} vs {T.growing.stays.toFixed(2)}.</p>
+      <hr className="pc" />
+      <h4 className="fp-h pc">{SPREAD_EXAMPLES.length} past fires, {T.period}</h4>
+      <ul className="its">
+        {SPREAD_EXAMPLES.map((x, i) => (
+          <li key={x.id}><button type="button" className={`it${i === s.spSel ? ' on' : ''}`} data-k={`cell-${i}`} data-spsel={i} aria-pressed={i === s.spSel} onClick={() => act.selectSpread(i)}>
+            <span className="it-n">{i + 1}</span><span className="it-name">{x.label}<small>{longDay(x.day)}</small></span><span /><span />
+          </button></li>
+        ))}
+      </ul>
+    </section>
+    <section className="fp fp3 m-fp3" data-anchor=".mss" aria-label="How to read the map">
+      <div className="pbg" aria-hidden="true" />
+      <div className="mss m-sp">
+        <div className="m-sp-h"><b>How to read the map</b><span>Red squares are where the model expected fire the next day, orange where it was possible. Dark outlines show the fire on the day it started from; blue squares show what really burned. Red with blue is a hit; blue alone is a miss.</span></div>
+      </div>
+    </section>
+    <ZoomStack act={act} />
+    <Attr cls="mv-attr" hz={s.hz} mode={s.mode} live={s.D.live} theme={s.theme} />
+  </>
+}
+
 const MapView = forwardRef(function MapView({ s, act }, ref) {
-  return <main className="layer mv-layer" ref={ref} aria-label="Map view">{s.hz === 'fire' && s.mode === 'model' ? <ModelPanels s={s} act={act} /> : <LivePanels s={s} act={act} />}</main>
+  const panels = s.hz === 'fire' && s.mode === 'model' ? <ModelPanels s={s} act={act} />
+    : s.hz === 'fire' && s.mode === 'spread' ? <SpreadPanels s={s} act={act} /> : <LivePanels s={s} act={act} />
+  return <main className="layer mv-layer" ref={ref} aria-label="Map view">{panels}</main>
 })
 
 export default MapView

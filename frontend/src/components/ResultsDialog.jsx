@@ -1,6 +1,7 @@
 // "Model results" dialog: the fire detector, the spread predictor, and the training data
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MODEL, STATS, detectorTotals, scene } from '../lib/model.js'
+import { SPREAD_EXAMPLES, longDay } from '../lib/spreadExamples.js'
 import { nf, pc0 } from '../lib/format.js'
 import { ExImgs } from './MapView.jsx'
 import { FireIcon, XMark } from './icons.jsx'
@@ -36,26 +37,23 @@ function Detector() {
 }
 
 function Spread() {
-  const D = MODEL.spread
+  const T = MODEL.spread.test
   return <>
-    <Head eye="Model results · Spread predictor" title="Forecasting tomorrow's fire">64 × 64 km areas in 1 km squares, from past fires in the Next Day Wildfire Spread test data. That data has no locations, so these can’t go on the map.</Head>
+    <Head eye="Model results · Spread predictor" title="Forecasting the next day's fire">For the 64 × 64 km area around a fire, in 1 km squares: the chance each square is burning the next day. It learns from 3 days of NOAA-20 satellite fire, gridMET weather and terrain, and runs live on the map.</Head>
     <div className="tiles t3">
-      <Tile l="Next-day fire caught" v="52%" s="vs 27% for “tomorrow = today”" />
-      <Tile l="Flagged squares that burn" v="1 in 4" s="Leans toward warning too much" />
-      <Tile l="Risk cutoff" v={`${Math.round(D.cutoff * 100)}%`} s="Squares above this count as fire" />
+      <Tile l="Overlap with what burned" v={`${T.all.iou.toFixed(2)} vs ${T.all.stays.toFixed(2)}`} s={`IoU, vs “the fire stays where it is”, on ${T.period} fires it never saw`} />
+      <Tile l="On larger, growing fires" v={`${T.growing.iou.toFixed(2)} vs ${T.growing.stays.toFixed(2)}`} s={`It caught ${Math.round(T.growing.newCaught * 100)}% of their new spread`} />
+      <Tile l="Area marked likely that burned" v={`${Math.round(T.all.likelyBurned * 100)}%`} s="Its chances are calibrated on 2023 fires" />
     </div>
     <section className="cs" aria-labelledby="ex2">
-      <div className="cs-hd"><h3 id="ex2">Today's fire, the forecast, and what burned</h3></div>
-      <p className="cs-tk">Left: where fire is burning on day 1. Middle: the model's chance of fire on day 2. Brighter means more likely, and the cyan outline is today's fire, so you can see where it expects growth. Right: what actually burned on day 2.</p>
-      <div className="exs">{D.rows.map((r, i) => (
-        <article className="ex" key={i}>
-          <ExImgs k="spr" i={i} alts={['Day 1: fire today', 'Forecast for day 2', 'Day 2: what burned']} />
-          <p className="ex-st"><b>{r.kind}: caught {r.caught} of {r.burned} km² ({pc0(r.caught, r.burned)})</b><span>Fire today {r.today} km² · flagged {r.flagged} km² · burned {r.burned} km²</span></p>
-        </article>
-      ))}</div>
-      <p className="cs-tk">The first three are among the model's best forecasts. The fourth is typical and matches its overall score of about half. In every case it flags a larger area than burns, which is the safer mistake for responders.</p>
+      <div className="cs-hd"><h3 id="ex2">See it next to what burned</h3></div>
+      <p className="cs-tk">On the map, open <b>Spread, past fire</b> to see these held-out fires: the fire on the day the forecast starts from, the model's forecast, and what really burned the next day. They are the test fires where it caught the most spread, so they show it at its best. It does best on large, actively spreading fires; on many small ones it expects a shrinkage that doesn't happen.</p>
+      <div className="tbl-wrap"><table className="tbl">
+        <thead><tr><th className="tl">Past fire</th><th className="tl">Fire day</th></tr></thead>
+        <tbody>{SPREAD_EXAMPLES.map((x) => <tr key={x.id}><td className="tl">{x.label}</td><td className="tl">{longDay(x.day)}</td></tr>)}</tbody>
+      </table></div>
     </section>
-    <NextStep />
+    <p className="ds-note">Scores: docs/spread_v2_test_results.txt. How it was built and tested: docs/spread_retrain_plan.md.</p>
   </>
 }
 

@@ -479,3 +479,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
 }
+
+/* Spread model on a past fire (MapView SpreadPanels, lib/spreadExamples.js drawPast) */
+.ly-sp-today { border: 2px solid var(--ink); border-radius: 2px; }
+.ly-sp-forecast { border-radius: 3px; background: rgba(229, 72, 58, .78); }
+.ly-sp-actual { border-radius: 2px; background: #2a78d6; transform: scale(.6); }
+.m-sp-go { margin-top: 10px; align-self: flex-start; }

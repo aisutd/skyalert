@@ -153,7 +153,8 @@ independent, so the intervals are somewhat optimistic. The margin over persisten
 compared with them.
 
 Shipped as `models/spread_v2/` with `backend/spread_forecast.py` and the map overlay
-(`frontend/src/components/SpreadForecast.jsx`). Live inputs match stored training tiles to float16
+(first `SpreadForecast.jsx`, then the redesigned UI merged from `test2`: `lib/live.js`, `MapStage.jsx`,
+`MapView.jsx`). Live inputs match stored training tiles to float16
 rounding (`tests/test_spread_forecast.py`).
 
 ## Review (R5, 2026-11-13)
@@ -181,7 +182,7 @@ Known and left as is:
 
 ## Demo examples (2026-11-13)
 
-The map's "Past fire examples" use `?day=` on `/api/spread-forecast` to start from a past day. The
+The map view's "Spread, past fire" mode uses `?day=` on `/api/spread-forecast` to start from a past day. The
 API then returns what NOAA-20 saw on the forecast day and that forecast's own scores.
 
 The four examples come from the **test** seasons (2024–2025), which the model never trained on or

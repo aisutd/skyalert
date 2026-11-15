@@ -6,6 +6,7 @@ import { RISK } from '../lib/format.js'
 import { MODEL } from '../lib/model.js'
 import { CA, heatURL } from '../lib/live.js'
 import { POINTS, WIND, rasterCells, sketchBounds, sketchToLatLng } from '../lib/sample.js'
+import { drawPast } from '../lib/spreadExamples.js'
 import { TILES } from './bits.jsx'
 
 const FireDots = memo(function FireDots({ fires }) {             // today's FIRMS detections; the map draws them on one canvas
@@ -52,13 +53,24 @@ function ModelTiles({ mSel, mLayers, onSelectTile }) {           // the detector
   })
 }
 
+function SpreadPast({ fc, layers, theme }) {                     // the spread model's forecast on a past fire, next to what burned
+  const url = useMemo(() => (fc && fc.status === 'ok' ? drawPast(fc, layers, theme) : null), [fc, layers, theme])
+  if (!url) return null
+  const b = [[fc.bounds.south, fc.bounds.west], [fc.bounds.north, fc.bounds.east]]
+  return <>
+    <ImageOverlay url={url} bounds={b} className="m-px" interactive={false} />
+    <Rectangle bounds={b} pathOptions={{ color: theme === 'dark' ? '#FFFFFF' : '#25272C', weight: 1.5, fill: false, dashArray: '5 4' }} interactive={false} />
+  </>
+}
+
 export default function MapStage({ s, act, setMap }) {   // attribution is our own .attr line, so Leaflet's is off
   const { D, hz, mode, layers } = s
-  const modelMode = hz === 'fire' && mode === 'model'
+  const modelMode = hz === 'fire' && mode === 'model', spreadMode = hz === 'fire' && mode === 'spread'
   return (
     <MapContainer className="lmap" ref={setMap} bounds={CA} zoomControl={false} attributionControl={false} scrollWheelZoom={false} zoomSnap={0.25} zoomDelta={0.5} preferCanvas role="region" aria-label="Map of fires and fire-weather risk">
       <TileLayer key={s.theme} url={TILES[s.theme].url} maxZoom={16} />
-      {modelMode ? <ModelTiles mSel={s.mSel} mLayers={s.mLayers} onSelectTile={act.selectTile} /> : <>
+      {spreadMode ? <SpreadPast fc={s.spFc} layers={s.spLayers} theme={s.theme} />
+        : modelMode ? <ModelTiles mSel={s.mSel} mLayers={s.mLayers} onSelectTile={act.selectTile} /> : <>
         {D.live && layers.predicted && D.modelReady && D.items.filter((it) => it.fc && it.fc.status === 'ok').map((it, i) => {
           const b = it.fc.bounds
           return <ImageOverlay key={`fc${i}`} url={heatURL(it.fc)} bounds={[[b.south, b.west], [b.north, b.east]]} opacity={0.9} interactive={false} />

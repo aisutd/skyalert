@@ -12,7 +12,8 @@ import { RISK, REDUCE, countUp, rollCoords, store } from './lib/format.js'
 import { SAMPLE, sketchBounds, sketchToLatLng } from './lib/sample.js'
 import { MODEL, modelBounds } from './lib/model.js'
 import { CA, buildLive } from './lib/live.js'
-import { getFires, getModelStatus } from './lib/api.js'
+import { getFires, getForecast, getModelStatus } from './lib/api.js'
+import { SPREAD_EXAMPLES } from './lib/spreadExamples.js'
 
 const TOP_N = 5                                                   // the map view zooms to the 5 highest-index fires; the list still shows all of them
 const MOVE = 740                                                  // ms the shared pieces take to fly between layouts
@@ -24,10 +25,13 @@ export default function App() {
   const [hz, setHzState] = useState('fire')
   const [sel, setSel] = useState(0)
   const [focus, setFocus] = useState(false)                       // map view zoomed to one picked fire instead of the top 5
-  const [mode, setModeState] = useState('live')                   // Fire only: 'live' (today) or 'model' (the detector on a past fire)
+  const [mode, setModeState] = useState('live')                   // Fire only: 'live' (today), 'model' (the detector on a past fire) or 'spread' (the spread model on a past fire)
   const [mSel, setMSel] = useState(0)
   const [layers, setLayers] = useState({ observed: true, predicted: true, context: true })
   const [mLayers, setMLayers] = useState({ sat: false, label: true, model: true })
+  const [spSel, setSpSel] = useState(0)                           // which past fire the spread model is shown on (lib/spreadExamples.js)
+  const [spFc, setSpFc] = useState(null)                          // its forecast from /api/spread-forecast?day=, null while loading
+  const [spLayers, setSpLayers] = useState({ today: true, forecast: true, actual: true })
   const [live, setLive] = useState(null)                          // today's fire data, built from /api/fires + /api/fire-context
   const [fires, setFires] = useState([])
   const [modelStatus, setModelStatus] = useState({ ready: false })
@@ -41,7 +45,7 @@ export default function App() {
   const app = useRef(null), ov = useRef(null), mv = useRef(null), fly = useRef(null), mapRef = useRef(null)
   const view = useRef('ov'), busy = useRef(false), liveSeq = useRef(0), flyT = useRef(0)
   const D = hz === 'fire' ? live || SAMPLE.fire : SAMPLE.flood
-  const S = useRef({}); S.current = { hz, sel, focus, mode, D, fires, modelStatus }   // latest state for the imperative code below
+  const S = useRef({}); S.current = { hz, sel, focus, mode, D, fires, modelStatus, spSel, spFc }   // latest state for the imperative code below
   const setMap = (m) => { mapRef.current = m; setMapState(m) }
 
   useLayoutEffect(() => { document.documentElement.dataset.theme = theme }, [theme])
@@ -53,6 +57,10 @@ export default function App() {
   function bounds() {
     const { hz, mode, D, sel, focus } = S.current
     if (hz === 'fire' && mode === 'model') return L.latLngBounds(modelBounds())
+    if (hz === 'fire' && mode === 'spread') {                     // the past fire's 64 × 64 pixel forecast area
+      const fc = S.current.spFc, ex = SPREAD_EXAMPLES[S.current.spSel]
+      return fc && fc.status === 'ok' ? L.latLngBounds([fc.bounds.south, fc.bounds.west], [fc.bounds.north, fc.bounds.east]) : L.latLng(ex.lat, ex.lon).toBounds(64000)
+    }
     const it = D.items[sel]
     if (view.current === 'mv' && focus) return L.latLng(it.latlng || sketchToLatLng(hz, it.pos)).toBounds(30000)   // a fire picked from the list: ~30 km around it
     if (D.live) return view.current === 'mv' && D.items.length ? L.latLngBounds(D.items.slice(0, TOP_N).map((x) => x.latlng)).pad(0.15) : L.latLngBounds(CA)
@@ -70,7 +78,7 @@ export default function App() {
     if (!m) return
     const { tl, br } = pads(), { hz, mode, D, focus } = S.current
     m.invalidateSize(false)
-    const o = { paddingTopLeft: tl, paddingBottomRight: br, ...(view.current === 'mv' && !(hz === 'fire' && mode === 'model') && (D.live || focus) ? { maxZoom: 9 } : {}) }   // cap zoom so close-together fires don't zoom to street level
+    const o = { paddingTopLeft: tl, paddingBottomRight: br, ...(view.current === 'mv' && !(hz === 'fire' && mode !== 'live') && (D.live || focus) ? { maxZoom: 9 } : {}) }   // cap zoom so close-together fires don't zoom to street level
     if (animate && !REDUCE.matches) {
       const el = m.getContainer(), land = () => { clearTimeout(flyT.current); el.classList.remove('is-flying') }
       el.classList.add('is-flying')                               // the dot canvas is CSS-scaled mid-flight, so it hides until the flight ends
@@ -89,7 +97,7 @@ export default function App() {
   // ---------- the overview ⇄ map view morph ----------
   async function go(to) {
     if (busy.current || to === view.current) return
-    if (to === 'ov' && S.current.mode === 'model') flushSync(() => setModeState('live'))   // the overview always describes today's live map
+    if (to === 'ov' && S.current.mode !== 'live') flushSync(() => setModeState('live'))   // the overview always describes today's live map
     busy.current = true
     const toMap = to === 'mv', from = toMap ? ov.current : mv.current, next = toMap ? mv.current : ov.current, mapEl = mapRef.current?.getContainer()
     const k = REDUCE.matches ? 0.001 : 1, A = []
@@ -226,6 +234,23 @@ export default function App() {
     return () => { ro.disconnect(); cancelAnimationFrame(raf) }
   }, [shown, map])                                                // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---------- the spread model on a past fire ----------
+  const spSeq = useRef(0)
+  function loadSpread(i) {                                        // the past fire's forecast, and what burned the next day
+    const seq = ++spSeq.current, ex = SPREAD_EXAMPLES[i]
+    setSpFc(null)
+    setBusyText('Running the spread model on a past fire…')
+    getForecast(ex.lat, ex.lon, ex.day).then((fc) => {
+      if (seq !== spSeq.current) return                           // another fire was picked meanwhile
+      setBusyText(null)
+      flushSync(() => setSpFc(fc))
+      if (S.current.mode === 'spread' && view.current === 'mv') fitView(true)
+      setAnnounce(fc.status === 'ok' && fc.check
+        ? `${ex.label}: the model forecast ${fc.check.new_fire_caught_pixels} of ${fc.check.new_fire_pixels} pixels of new fire.`
+        : `${ex.label}: ${fc.note || 'forecast unavailable'}.`)
+    })
+  }
+
   // ---------- actions ----------
   const act = {
     setHz(h) {
@@ -245,9 +270,17 @@ export default function App() {
     setMode(m) {
       if (busy.current || m === S.current.mode) return
       flushSync(() => { setModeState(m); setFocus(false) })
+      if (m === 'spread') loadSpread(S.current.spSel)
       fitView(true)
-      setAnnounce(m === 'model' ? 'Showing the fire detector on a past fire, Sequoia National Forest, August 2020.' : "Showing today's live fires.")
+      setAnnounce(m === 'model' ? 'Showing the fire detector on a past fire, Sequoia National Forest, August 2020.'
+        : m === 'spread' ? `Showing the spread model on a past fire, ${SPREAD_EXAMPLES[S.current.spSel].label}.` : "Showing today's live fires.")
     },
+    selectSpread(i) {
+      if (busy.current || i === S.current.spSel) return
+      flushSync(() => setSpSel(i))
+      loadSpread(i)
+    },
+    setSpLayer(k, v) { setSpLayers((l) => ({ ...l, [k]: v })) },
     selectTile(i) {
       if (busy.current) return
       setMSel(i)
@@ -283,7 +316,7 @@ export default function App() {
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
-  const s = { D, hz, sel, focus, mode, mSel, layers, mLayers, theme, fires, modelStatus }
+  const s = { D, hz, sel, focus, mode, mSel, layers, mLayers, theme, fires, modelStatus, spSel, spFc, spLayers }
   return <>
     {shown && (
       <div className="app" ref={app} data-hz={hz}>

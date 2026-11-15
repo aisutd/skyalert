@@ -228,9 +228,14 @@ Detection precision and recall count fire pixels against the voting mask. Spread
 
 ## Next-day spread forecast
 
-Click a fire on the Live Map, then **Forecast next-day spread**. The map shows the model's
-forecast for the next day over the 64 × 64 pixel area around the fire (about 64 km north–south,
-1 km pixels): red where fire is likely, orange where it's possible, and today's fire outlined.
+The dashboard runs the spread model on the strongest fires in California as soon as live data
+loads. Each fire shows its **chance of fire within 2 km** on the forecast day, and the map shows
+the forecast around it: the 64 × 64 pixel area, about 64 km north–south, in 1 km pixels.
+
+The chances are calibrated: the model's scores were mapped to how often fire really followed, on
+the 2023 fires (`training/calibrate_v2.py`, `models/spread_v2/calibration.json`). The forecast is
+for the day after the latest complete day of satellite data, so the UI shows its date rather than
+"tomorrow".
 
 - **Model:** `models/spread_v2/` (weights, input stats, threshold), served by
   `backend/spread_forecast.py` at `GET /api/spread-forecast`.
@@ -247,12 +252,12 @@ forecast for the next day over the 64 × 64 pixel area around the fire (about 64
 
   About 44% of the area it marks as likely did burn. On growing fires it caught 16% of new spread.
   Full scores are in `docs/spread_v2_test_results.txt`.
-- **Past fire examples** (top right of the map) replay held-out 2024–2025 fires: today's fire,
-  the forecast and what actually burned the next day, each with its own checkbox, plus that
-  forecast's score. They are the test fires where the model did best; see
-  `docs/spread_retrain_plan.md`, "Demo examples".
+- **Spread, past fire** (map view, Fire) replays held-out 2024–2025 fires. Each shows the fire on
+  the day the forecast starts from, the forecast, and what actually burned the next day, each with
+  its own checkbox, plus that forecast's scores. These are the test fires where the model did best;
+  see `docs/spread_retrain_plan.md`, "Demo examples".
 - **No forecast without fire data:** if NOAA-20 detections can't be loaded, or show a data gap,
-  the API returns 503 instead of a misleading map.
+  the API answers `status: "inputs_unavailable"` with the reason, instead of a misleading map.
 - **How it was built:** `docs/spread_retrain_plan.md` is the plan and evidence.
   - `training/build_spread_dataset.py` builds the tiles. It needs the gridMET yearly files from
     `python -m backend.gridmet_bulk download`, about 6 GB.

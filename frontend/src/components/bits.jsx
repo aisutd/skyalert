@@ -32,6 +32,7 @@ export function ThemeButton({ theme, onToggle }) {
 
 export function DataBadge({ hz, mode, live }) {
   if (hz === 'fire' && mode === 'model') return <span className="smp">Past fire, 2020</span>
+  if (hz === 'fire' && mode === 'spread') return <span className="smp">Past fire, 2024–25</span>
   return live ? <span className="smp live">Live data</span> : <span className="smp">Sample data</span>
 }
 
@@ -84,6 +85,7 @@ export const TILES = {
 }
 export function Attr({ cls, hz, mode, live, theme }) {
   const src = hz === 'fire' && mode === 'model' ? 'Model output: SkyAlert fire detector on Landsat-8, Aug 27, 2020'
+    : hz === 'fire' && mode === 'spread' ? 'Model output: SkyAlert spread model · Fires: NASA FIRMS, VIIRS NOAA-20 · Weather: gridMET · Terrain: AWS Terrain Tiles'
     : live ? 'Fires: NASA FIRMS, VIIRS NOAA-20 · Weather: Open-Meteo · Places: © OpenStreetMap' : 'Sample overlay, not real data'
   return <p className={`attr ${cls}`} data-k="attr">{src} · {TILES[theme].attr}</p>
 }

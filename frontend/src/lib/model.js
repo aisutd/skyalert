@@ -10,14 +10,15 @@ export const MODEL = {
       { patch: 'p00878', label: 332, model: 329, found: 316, bounds: [[36.16135, -118.43383], [36.23156, -118.34721]] },
     ],
   },
+  // The served spread model (models/spread_v2), scored once on the 2024–2025 fire seasons it never saw
+  // (docs/spread_v2_test_results.txt). IoU = overlap of the forecast with what burned (0–1).
+  // "All fires" is re-weighted to the natural mix (mostly small fires); "growing" = larger, spreading fires.
   spread: {
-    cutoff: 0.62,
-    rows: [
-      { kind: 'Good forecast', today: 16, flagged: 52, burned: 31, caught: 31 },
-      { kind: 'Good forecast', today: 20, flagged: 86, burned: 61, caught: 53 },
-      { kind: 'Good forecast', today: 43, flagged: 124, burned: 75, caught: 63 },
-      { kind: 'Typical forecast', today: 37, flagged: 107, burned: 58, caught: 28 },
-    ],
+    test: {
+      period: '2024–25',
+      all: { iou: 0.224, stays: 0.162, likelyBurned: 0.443, newCaught: 0.067 },
+      growing: { iou: 0.318, stays: 0.258, likelyBurned: 0.461, newCaught: 0.156 },
+    },
   },
 }
 MODEL.detector.rows.forEach((r) => { r.center = [(r.bounds[0][0] + r.bounds[1][0]) / 2, (r.bounds[0][1] + r.bounds[1][1]) / 2] })

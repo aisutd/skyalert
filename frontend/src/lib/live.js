@@ -50,7 +50,9 @@ function toItem(c, ctx, picked) {
   }
 }
 
-const chanceLevel = (p) => (p >= 62 ? 4 : p >= 40 ? 3 : p >= 20 ? 2 : 1)   // 62% is the model's own "this square burns tomorrow" cutoff
+const chanceLevel = (p) => (p >= 62 ? 4 : p >= 40 ? 3 : p >= 20 ? 2 : 1)   // calibrated chance of fire within 2 km (models/spread_v2/calibration.json)
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+export const shortDay = (iso) => { const [, m, d] = iso.split('-'); return `${MONTHS[+m - 1]} ${+d}` }   // "2026-11-14" -> "Nov 14"
 async function applyForecast(it) {                                // the model's chance replaces the fire-weather index
   it.fc = await getForecast(...it.latlng)
   if (it.fc.status !== 'ok') return
@@ -79,25 +81,27 @@ export const seriesFor = (D, sel) => (D.live ? seriesOf(D.items[sel]) : D.series
 
 // the sentence for one fire, shown in the right box above its details
 export function selHeadline(D, it) {
-  return D.modelReady ? `Highest chance of fire tomorrow: ${it.prob}% near ${it.name}` : `Fire weather is ${RISK[it.risk].toLowerCase()} near ${it.name}`
+  return D.modelReady ? `Chance of fire on ${D.forecastDay}: ${it.prob}% near ${it.name}` : `Fire weather is ${RISK[it.risk].toLowerCase()} near ${it.name}`
 }
 
 function liveData(items, total, modelStatus) {
   const top = items.reduce((a, b) => (b.prob > a.prob ? b : a), items[0])
   const anyFire = items.some((x) => !x.picked)
-  const m = modelStatus.ready && items.some((x) => x.fc && x.fc.status === 'ok')   // the model ran on today's data
+  const ran = items.find((x) => x.fc && x.fc.status === 'ok'), m = modelStatus.ready && !!ran   // the model ran on the latest data
+  // The forecast is for the day after the latest complete day of satellite data: usually today, so say the date
+  const forecastDay = ran ? shortDay(ran.fc.forecast_day) : null
   return {
-    key: 'fire', live: true, modelReady: m, unit: m ? '%' : '/100', count: total, items,
-    region: 'CA', window: m ? 'Tomorrow' : 'Next 24 h',
-    model: m ? "SkyAlert spread model, on today's FIRMS fires and GRIDMET weather" : 'Fosberg fire-weather index, from Open-Meteo weather',
+    key: 'fire', live: true, modelReady: m, unit: m ? '%' : '/100', count: total, items, forecastDay,
+    region: 'CA', window: m ? `For ${forecastDay}` : 'Next 24 h',
+    model: m ? 'SkyAlert spread model, on NOAA-20 fires of the last 3 days and gridMET weather' : 'Fosberg fire-weather index, from Open-Meteo weather',
     headline: !anyFire ? 'No fires detected in CA in the last 2 days'
-      : m ? `Highest chance of fire tomorrow: ${top.prob}% near ${top.name}` : `Fire weather is ${RISK[top.risk].toLowerCase()} near ${top.name}`,
+      : m ? `Highest chance of fire on ${forecastDay}: ${top.prob}% near ${top.name}` : `Fire weather is ${RISK[top.risk].toLowerCase()} near ${top.name}`,
     topName: anyFire ? top.name : null,   // the left box shows just this place; the sentence moves to the right box (selHeadline)
     risk: top.risk, prob: top.prob,
-    probLabel: m ? 'Chance of fire tomorrow within 2 km, from the SkyAlert spread model' : 'Fire-weather index (0–100), worst hour in the next 24 h',
+    probLabel: m ? `Chance of fire within 2 km on ${forecastDay}, from the SkyAlert spread model` : 'Fire-weather index (0–100), worst hour in the next 24 h',
     regionLabel: m ? 'highest chance' : 'highest index',
     metricName: 'Fire power (FRP)', listTitle: m ? 'Fires in CA, highest chance first' : 'Fires in CA, highest index first',
-    layers: { observed: 'Fire detections, last 2 days', predicted: m ? 'Model: chance of fire tomorrow' : modelStatus.ready ? 'Model predictions (inputs unavailable)' : 'Model predictions (waiting for weights)', context: '' },
+    layers: { observed: 'Fire detections, last 2 days', predicted: m ? `Model: chance of fire on ${forecastDay}` : modelStatus.ready ? 'Model predictions (inputs unavailable)' : 'Model predictions (model not loaded)', context: '' },
   }
 }
 
