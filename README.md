@@ -50,9 +50,9 @@ Then open **http://127.0.0.1:8000/prototype/**. Open it through this address, no
 
 The first load can take several seconds while the backend downloads the fires from NASA and the weather for each one. After that the fires are cached for 10 minutes.
 
-The page has two views. The **overview** shows the riskiest fire in California as one big number, with the map in a box on the right. **Focus on the map** opens the map full screen, with three floating panels: the summary (top left), the selected fire and the list of fires (right) and the weather (bottom). **Overview**, or `Esc`, goes back.
+The page has two views. The **overview** shows the riskiest fire in the area on the map (the whole contiguous US at first) as one big number, with the map in a box on the right. **Focus on the map** opens the map full screen, with three floating panels: the summary (top left), the selected fire and the list of fires (right) and the weather (bottom). **Overview**, or `Esc`, goes back.
 
-- **Fire** is live: today's NASA FIRMS detections across the US (red dots) and the 8 strongest fires in California, numbered on the map. Each one gets its place name, weather and the Fosberg fire-weather index from `/api/fire-context`, and the list is sorted by that index. Detections within 15 km of each other count as one fire. Click a fire dot or any other spot on the map to add it to the list and see its weather.
+- **Fire** is live: today's NASA FIRMS detections across the US (red dots) and the 8 strongest fires in the area on the map, numbered on the map. In the map view the list follows as you pan and zoom. Each one gets its place name, weather and the Fosberg fire-weather index from `/api/fire-context`, plus the spread model's chance of fire within 2 km (`/api/spread-forecast`), and the list is sorted by that chance (by the index if the model can't run). Detections within 15 km of each other count as one fire. Click a fire dot or any other spot on the map to add it to the list and see its weather.
 - **Flood** is still sample data.
 - **Model on a past fire** (button on the overview, or the switch in the map view) draws the fire detector's output on the map at its real location: 4 Landsat-8 tiles in Sequoia National Forest, Aug 27, 2020, placed by matching them against Landsat scene 042/035 from that day. The spread predictor's examples are shown in the bottom panel, not on the map, because their test data has no locations.
 - **Model results** (chart button) has the same results as a popup, plus the training-data stats. Images are in `prototype/model_results/`.
@@ -228,9 +228,15 @@ Detection precision and recall count fire pixels against the voting mask. Spread
 
 ## Next-day spread forecast
 
-The dashboard runs the spread model on the strongest fires in California as soon as live data
-loads. Each fire shows its **chance of fire within 2 km** on the forecast day, and the map shows
-the forecast around it: the 64 × 64 pixel area, about 64 km north–south, in 1 km pixels.
+The dashboard (Sneha's design, `frontend/`) lists the strongest fires in the area on the map and
+runs the spread model on each:
+- The first view is the whole contiguous US.
+- In the map view, the list follows wherever you pan or zoom.
+- Clicking any fire dot adds that fire to the list with its forecast.
+
+Each fire shows its **chance of fire within 2 km** on the forecast day. The selected fire's panel
+gives the forecast details (likely area, new spread, input dates), and the map draws its forecast:
+the 64 × 64 pixel area, about 64 km north–south, in 1 km pixels.
 
 The chances are calibrated: the model's scores were mapped to how often fire really followed, on
 the 2023 fires (`training/calibrate_v2.py`, `models/spread_v2/calibration.json`). The forecast is

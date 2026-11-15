@@ -1,13 +1,13 @@
-// Turns today's FIRMS detections into the list of fires the UI shows: cluster nearby detections,
-// look up each fire's place + weather, and (once the spread model has weights) its chance of fire tomorrow.
+// Turns the latest FIRMS detections into the list of fires the UI shows: cluster nearby detections in the
+// area on the map, look up each fire's place + weather, and the spread model's chance of fire on the next day.
 import L from 'leaflet'
 import { getFireContext, getForecast } from './api.js'
 import { RISK, compass } from './format.js'
 
-export const CA = [[32.5, -124.5], [42.0, -114.1]]                // first view: California
+export const US = [[24.4, -125.0], [49.5, -66.9]]                // first view: the contiguous US (the fires and the model cover it all)
 const LEVEL = { low: 1, moderate: 2, high: 3, critical: 4 }
 export const CLUSTER_KM = 15                                      // detections this close count as one fire
-const CANDIDATES = 8                                              // the strongest 8 fires get weather
+const CANDIDATES = 8                                              // the strongest 8 fires in the area get weather and a forecast
 
 export const kmBetween = (a, b) => Math.hypot((a[0] - b[0]) * 111.32, (a[1] - b[1]) * 111.32 * Math.cos((a[0] * Math.PI) / 180))
 
@@ -22,6 +22,11 @@ export function clustersIn(fires, bounds) {                       // strongest d
     else if (out.length < CANDIDATES) out.push({ latlng: p, frp: f.frp, count: 1, last: seen })
   }
   return { clusters: out, total: inside.length }
+}
+
+export function clusterAround(fires, f) {                         // one clicked fire dot plus the detections near it (from the prototype)
+  const p = [f.latitude, f.longitude], near = fires.filter((x) => kmBetween(p, [x.latitude, x.longitude]) < CLUSTER_KM)
+  return { latlng: p, frp: Math.max(...near.map((x) => x.frp ?? 0)), count: near.length, last: near.map((x) => `${x.acq_date} ${x.acq_time_utc}`).sort().pop(), fire: true }
 }
 
 const STATES = { Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA', Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', Florida: 'FL', Georgia: 'GA',
@@ -41,11 +46,11 @@ function toItem(c, ctx, picked) {
   const r = ctx.weather && ctx.weather.risk
   return {
     id: `${c.latlng[0].toFixed(3)}, ${c.latlng[1].toFixed(3)}`,
-    name: placeName(ctx.location) || 'Unknown area',
+    name: placeName(ctx.location) || (picked ? 'Picked spot' : 'Unknown area'),
     risk: r ? LEVEL[r.key] || 1 : 1, prob: r ? Math.round(r.index) : 0, fwi: r ? Math.round(r.index) : 0, conf: 0,
-    metric: picked ? '—' : `${c.frp.toFixed(1)} MW`,
+    metric: picked || c.frp == null ? '—' : `${c.frp.toFixed(1)} MW`,
     evidence: picked ? 'No detection here' : `${c.count} detection${c.count === 1 ? '' : 's'}`,
-    window: picked ? 'No fires detected: weather at the middle of CA' : `Last detected ${c.last} UTC`,
+    window: picked ? (c.clickedSpot ? 'Weather for the spot you clicked' : 'No fires detected in view: weather at the middle of the map') : `Last detected ${c.last} UTC`,
     latlng: c.latlng, ctx, reasons: ctx.reasons || [], picked: !!picked,
   }
 }
@@ -92,22 +97,28 @@ function liveData(items, total, modelStatus) {
   const forecastDay = ran ? shortDay(ran.fc.forecast_day) : null
   return {
     key: 'fire', live: true, modelReady: m, unit: m ? '%' : '/100', count: total, items, forecastDay,
-    region: 'CA', window: m ? `For ${forecastDay}` : 'Next 24 h',
+    region: 'In view', window: m ? `For ${forecastDay}` : 'Next 24 h',
     model: m ? 'SkyAlert spread model, on NOAA-20 fires of the last 3 days and gridMET weather' : 'Fosberg fire-weather index, from Open-Meteo weather',
-    headline: !anyFire ? 'No fires detected in CA in the last 2 days'
+    headline: !anyFire ? 'No fires detected in this area in the last 2 days'
       : m ? `Highest chance of fire on ${forecastDay}: ${top.prob}% near ${top.name}` : `Fire weather is ${RISK[top.risk].toLowerCase()} near ${top.name}`,
     topName: anyFire ? top.name : null,   // the left box shows just this place; the sentence moves to the right box (selHeadline)
     risk: top.risk, prob: top.prob,
     probLabel: m ? `Chance of fire within 2 km on ${forecastDay}, from the SkyAlert spread model` : 'Fire-weather index (0–100), worst hour in the next 24 h',
     regionLabel: m ? 'highest chance' : 'highest index',
-    metricName: 'Fire power (FRP)', listTitle: m ? 'Fires in CA, highest chance first' : 'Fires in CA, highest index first',
+    metricName: 'Fire power (FRP)', listTitle: m ? 'Fires in view, highest chance first' : 'Fires in view, highest index first',
     layers: { observed: 'Fire detections, last 2 days', predicted: m ? `Model: chance of fire on ${forecastDay}` : modelStatus.ready ? 'Model predictions (inputs unavailable)' : 'Model predictions (model not loaded)', context: '' },
   }
 }
 
-export async function buildLive({ fires, bounds, modelStatus, withModel }) {
+// pick: a clicked fire (clusterAround) or spot ({ latlng, clickedSpot: true }); it joins the list, marked `clicked`
+export async function buildLive({ fires, bounds, modelStatus, withModel, pick = null }) {
   const { clusters, total } = clustersIn(fires, bounds)
   let items = await Promise.all(clusters.map(async (c) => toItem(c, await getFireContext(...c.latlng))))
+  if (pick) {                                                     // the spot or fire dot you clicked joins the list (as in the prototype)
+    const it = toItem(pick, await getFireContext(...pick.latlng), !pick.fire)
+    it.clicked = true
+    items = items.filter((x) => kmBetween(x.latlng, it.latlng) >= CLUSTER_KM).concat(it)
+  }
   if (!items.length) { const c = L.latLngBounds(bounds).getCenter(); items = [toItem({ latlng: [c.lat, c.lng] }, await getFireContext(c.lat, c.lng), true)] }
   if (withModel && modelStatus.ready) await Promise.all(items.map(applyForecast))
   items.sort((a, b) => b.prob - a.prob)                           // highest first

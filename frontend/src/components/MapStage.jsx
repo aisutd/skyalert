@@ -4,7 +4,7 @@ import L from 'leaflet'
 import { CircleMarker, ImageOverlay, MapContainer, Marker, Rectangle, SVGOverlay, TileLayer } from 'react-leaflet'
 import { RISK } from '../lib/format.js'
 import { MODEL } from '../lib/model.js'
-import { CA, heatURL } from '../lib/live.js'
+import { US, heatURL } from '../lib/live.js'
 import { POINTS, WIND, rasterCells, sketchBounds, sketchToLatLng } from '../lib/sample.js'
 import { drawPast } from '../lib/spreadExamples.js'
 import { TILES } from './bits.jsx'
@@ -53,6 +53,16 @@ function ModelTiles({ mSel, mLayers, onSelectTile }) {           // the detector
   })
 }
 
+const LIVE_LAYERS = { today: true, forecast: true, actual: false }
+function SelectedForecast({ fc, theme }) {                        // the selected live fire's forecast, drawn pixel by pixel
+  const url = useMemo(() => drawPast(fc, LIVE_LAYERS, theme), [fc, theme])
+  const b = [[fc.bounds.south, fc.bounds.west], [fc.bounds.north, fc.bounds.east]]
+  return <>
+    <ImageOverlay url={url} bounds={b} className="m-px" interactive={false} />
+    <Rectangle bounds={b} pathOptions={{ color: theme === 'dark' ? '#FFFFFF' : '#25272C', weight: 1, fill: false, dashArray: '4 4', opacity: 0.7 }} interactive={false} />
+  </>
+}
+
 function SpreadPast({ fc, layers, theme }) {                     // the spread model's forecast on a past fire, next to what burned
   const url = useMemo(() => (fc && fc.status === 'ok' ? drawPast(fc, layers, theme) : null), [fc, layers, theme])
   if (!url) return null
@@ -67,13 +77,16 @@ export default function MapStage({ s, act, setMap }) {   // attribution is our o
   const { D, hz, mode, layers } = s
   const modelMode = hz === 'fire' && mode === 'model', spreadMode = hz === 'fire' && mode === 'spread'
   return (
-    <MapContainer className="lmap" ref={setMap} bounds={CA} zoomControl={false} attributionControl={false} scrollWheelZoom={false} zoomSnap={0.25} zoomDelta={0.5} preferCanvas role="region" aria-label="Map of fires and fire-weather risk">
+    <MapContainer className="lmap" ref={setMap} bounds={US} zoomControl={false} attributionControl={false} scrollWheelZoom={false} zoomSnap={0.25} zoomDelta={0.5} preferCanvas role="region" aria-label="Map of fires and fire-weather risk">
       <TileLayer key={s.theme} url={TILES[s.theme].url} maxZoom={16} />
       {spreadMode ? <SpreadPast fc={s.spFc} layers={s.spLayers} theme={s.theme} />
         : modelMode ? <ModelTiles mSel={s.mSel} mLayers={s.mLayers} onSelectTile={act.selectTile} /> : <>
-        {D.live && layers.predicted && D.modelReady && D.items.filter((it) => it.fc && it.fc.status === 'ok').map((it, i) => {
-          const b = it.fc.bounds
-          return <ImageOverlay key={`fc${i}`} url={heatURL(it.fc)} bounds={[[b.south, b.west], [b.north, b.east]]} opacity={0.9} interactive={false} />
+        {D.live && layers.predicted && D.modelReady && D.items.map((it, i) => {
+          if (!it.fc || it.fc.status !== 'ok') return null
+          const b = it.fc.bounds, on = i === s.sel
+          // The selected fire: crisp pixels (likely, possible, its fire outlined), like the past-fire view; others: the heat map
+          return on ? <SelectedForecast key={`fc${i}`} fc={it.fc} theme={s.theme} />
+            : <ImageOverlay key={`fc${i}`} url={heatURL(it.fc)} bounds={[[b.south, b.west], [b.north, b.east]]} opacity={0.9} interactive={false} />
         })}
         {D.live && layers.observed && <FireDots fires={s.fires} />}
         {!D.live && <SampleRaster hz={hz} layers={layers} />}

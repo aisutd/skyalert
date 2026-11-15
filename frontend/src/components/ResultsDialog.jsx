@@ -11,7 +11,7 @@ const UINT16 = 65535
 
 const Head = ({ eye, title, children }) => <header className="ds-hd"><div><p className="ds-eye">{eye}</p><h2 id="ds-title">{title}</h2><p className="ds-sub">{children}</p></div></header>
 const Tile = ({ l, v, s }) => <div className="tile"><span className="tile-l">{l}</span><span className="tile-v">{v}</span><span className="tile-s">{s}</span></div>
-const NextStep = () => <p className="ds-note">These are past fires where the correct answer is known. Live CA inputs are already built; connecting the model to them is the next step.</p>
+const NextStep = () => <p className="ds-note">These are past fires where the correct answer is known. The detector isn't running on live satellite images yet; the spread model is (see Tomorrow's risk).</p>
 
 function Detector() {
   const R = MODEL.detector.rows, { L, M, F } = detectorTotals()

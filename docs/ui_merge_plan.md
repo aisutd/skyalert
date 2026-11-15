@@ -55,3 +55,17 @@ Branch `merge-ui-ml`, from `feat-spread-forecast` plus `origin/test2`. Decisions
 ## Mac safety
 
 Same as before: servers and scripts under `nice`, nothing heavy running in parallel.
+
+## Done (2026-11-14)
+
+All steps are done and verified in Chrome:
+- the US-wide list on first load
+- a zoom re-lists the fires in view, and makes no further requests once settled (no loop)
+- a clicked unlisted fire joins the list with its forecast panel
+- the past-fire mode
+- dark mode
+- the Results dialog
+
+Found while checking: Sneha's `.lm-mk { position: relative; }` stacked Leaflet's marker icons, so
+numbered marker n was drawn 12 px × (n − 1) south of its fire (marker 9 was 96 px off). It's now
+`position: absolute`; every marker lands within 1 px of its fire.

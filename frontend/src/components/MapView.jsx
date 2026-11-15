@@ -1,7 +1,7 @@
 // The map view (concept 05): full-bleed map with three floating panels. Fire has a second mode, the model on a past fire.
 import { forwardRef } from 'react'
 import { MODEL, detectorTotals } from '../lib/model.js'
-import { measFor, seriesFor, selHeadline } from '../lib/live.js'
+import { measFor, seriesFor, selHeadline, shortDay } from '../lib/live.js'
 import { SPREAD_EXAMPLES, longDay, pixelKm2 } from '../lib/spreadExamples.js'
 import { nf, pc0 } from '../lib/format.js'
 import { AnimText, Attr, Brand, Chart, DataBadge, HazardToggle, Kind, Layers, Legend, Risk, ThemeButton } from './bits.jsx'
@@ -91,6 +91,23 @@ function ModelPanels({ s, act }) {
   </>
 }
 
+function ForecastBox({ fc }) {                                    // the spread model's forecast for the selected live fire
+  const km2 = pixelKm2(fc), area = (px) => `${Math.round(px * km2)} km²`, T = MODEL.spread.test, f = fc.inputs.fire_days
+  return (
+    <div className="fcb pc" aria-label="Spread forecast">
+      <p className="fcb-h">Forecast for {shortDay(fc.forecast_day)}, from fires seen {shortDay(f['t-2'])}–{shortDay(f.t)}</p>
+      <ul className="fcb-k">
+        <li><i className="ly-g ly-sp-forecast" aria-hidden="true" />Likely burning<b>{area(fc.forecast_pixels)}</b></li>
+        <li><i className="ly-g ly-sp-possible" aria-hidden="true" />Possible (chance ≥ 15%)</li>
+        <li><i className="ly-g ly-sp-today" aria-hidden="true" />Burning on {shortDay(fc.fire_day)}<b>{area(fc.fire_today_pixels)}</b></li>
+      </ul>
+      <p className="fcb-s">New spread forecast: {area(fc.new_fire_pixels)} beyond the fire on {shortDay(fc.fire_day)}. Weather from gridMET, {fc.inputs.weather_days.map(shortDay).join('–')}.</p>
+      {fc.notes.map((n) => <p className="fcb-s fcb-note" key={n}>{n}</p>)}
+      <p className="fcb-s">Tested on {T.period} fires it never saw: overlap with what burned {T.all.iou.toFixed(2)} vs {T.all.stays.toFixed(2)} for “stays where it is” ({T.growing.iou.toFixed(2)} vs {T.growing.stays.toFixed(2)} on growing fires). A guide, not a certainty.</p>
+    </div>
+  )
+}
+
 function LivePanels({ s, act }) {
   const { D, sel } = s, it = D.items[sel]
   const meas = measFor(D, sel), series = seriesFor(D, sel)
@@ -124,6 +141,7 @@ function LivePanels({ s, act }) {
         </>}
       </dl>
       <p className="selp-win pc">{it.window}</p>
+      {D.live && it.fc && it.fc.status === 'ok' && <ForecastBox fc={it.fc} />}
       {D.live && it.reasons && it.reasons.length > 0 && <ul className="rs pc" aria-label="Why this risk level">{it.reasons.map((r, i) => <li key={i} className={`rs-${r.effect}`}>{r.text}</li>)}</ul>}
       <hr className="pc" />
       <h4 className="fp-h pc">{D.listTitle || `All cells, ${D.window.toLowerCase()}`}</h4>

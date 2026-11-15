@@ -1,4 +1,10 @@
-// Model results (teammate's figures, cut into panels in public/model_results/) and training-data stats (skyalert/output.txt)
+// Fixed model results and training-data stats, each checked against its source (2026-11-14):
+// - detector rows: data/demos/california/patch_report.csv from demos/detector_california.py (val split,
+//   Aug 27 2020; label = true_fire_pixels, model = predicted_fire_pixels, found = correct_fire_pixels).
+//   Images in public/model_results/det_*.png come from the same run.
+// - detector overall "93% · 82% on 3,113 unseen tiles": data/training/detection_results.csv (test) and index.csv
+// - spread: models/spread_v2 test scores, docs/spread_v2_test_results.txt
+// - STATS.fire: skyalert/output.txt (notebooks/inspect_landsat.py)
 
 export const MODEL = {
   detector: {

@@ -11,7 +11,7 @@ import Loader from './components/Loader.jsx'
 import { RISK, REDUCE, countUp, rollCoords, store } from './lib/format.js'
 import { SAMPLE, sketchBounds, sketchToLatLng } from './lib/sample.js'
 import { MODEL, modelBounds } from './lib/model.js'
-import { CA, buildLive } from './lib/live.js'
+import { US, buildLive, clusterAround } from './lib/live.js'
 import { getFires, getForecast, getModelStatus } from './lib/api.js'
 import { SPREAD_EXAMPLES } from './lib/spreadExamples.js'
 
@@ -44,6 +44,9 @@ export default function App() {
 
   const app = useRef(null), ov = useRef(null), mv = useRef(null), fly = useRef(null), mapRef = useRef(null)
   const view = useRef('ov'), busy = useRef(false), liveSeq = useRef(0), flyT = useRef(0)
+  const area = useRef(L.latLngBounds(US))                         // the area the fire list covers: the whole US at first, then what's on the map
+  const pick = useRef(null)                                       // a clicked fire dot or spot, which joins the list
+  const ownMove = useRef(false), ownMoveT = useRef(0), areaT = useRef(0)   // ownMove: the app is moving the map itself, so don't re-list
   const D = hz === 'fire' ? live || SAMPLE.fire : SAMPLE.flood
   const S = useRef({}); S.current = { hz, sel, focus, mode, D, fires, modelStatus, spSel, spFc }   // latest state for the imperative code below
   const setMap = (m) => { mapRef.current = m; setMapState(m) }
@@ -63,7 +66,7 @@ export default function App() {
     }
     const it = D.items[sel]
     if (view.current === 'mv' && focus) return L.latLng(it.latlng || sketchToLatLng(hz, it.pos)).toBounds(30000)   // a fire picked from the list: ~30 km around it
-    if (D.live) return view.current === 'mv' && D.items.length ? L.latLngBounds(D.items.slice(0, TOP_N).map((x) => x.latlng)).pad(0.15) : L.latLngBounds(CA)
+    if (D.live) return view.current === 'mv' && D.items.length ? L.latLngBounds(D.items.slice(0, TOP_N).map((x) => x.latlng)).pad(0.15) : area.current
     return L.latLngBounds(sketchBounds(hz))
   }
   function pads() {                                               // the part of the map the current layout leaves visible
@@ -76,6 +79,12 @@ export default function App() {
   function fitView(animate) {
     const m = mapRef.current
     if (!m) return
+    // Moves the app makes itself must not re-list the fires (that would move the map again). Flag them
+    // before anything moves (invalidateSize can fire moveend at once) and release the flag only after
+    // the fit or flight has ended
+    ownMove.current = true
+    clearTimeout(ownMoveT.current)
+    const release = (ms) => { clearTimeout(ownMoveT.current); ownMoveT.current = setTimeout(() => { ownMove.current = false }, ms) }
     const { tl, br } = pads(), { hz, mode, D, focus } = S.current
     m.invalidateSize(false)
     const o = { paddingTopLeft: tl, paddingBottomRight: br, ...(view.current === 'mv' && !(hz === 'fire' && mode !== 'live') && (D.live || focus) ? { maxZoom: 9 } : {}) }   // cap zoom so close-together fires don't zoom to street level
@@ -84,9 +93,15 @@ export default function App() {
       el.classList.add('is-flying')                               // the dot canvas is CSS-scaled mid-flight, so it hides until the flight ends
       clearTimeout(flyT.current); flyT.current = setTimeout(land, 1500)   // safety net if moveend never comes
       m.once('moveend', land)
+      m.once('moveend', () => release(80))                        // the flight has landed
+      release(1800)                                               // safety net if moveend never comes
       m.flyToBounds(bounds(), { ...o, duration: 0.85, easeLinearity: 0.4 })
-    } else m.fitBounds(bounds(), { ...o, animate: false })
+    } else {
+      m.fitBounds(bounds(), { ...o, animate: false })             // moveend fires during this call
+      release(80)
+    }
   }
+
   function layoutMap() {
     const m = mapRef.current
     if (!m || !ov.current) return
@@ -184,17 +199,18 @@ export default function App() {
   }
 
   // ---------- live data ----------
-  async function refreshLive(selIdx = 0) {
+  async function refreshLive(selIdx = 0, keepId = null) {
     const seq = ++liveSeq.current
     setBusyText((t) => (t && t.startsWith('Running') ? t : 'Updating fires…'))
-    const d = await buildLive({ fires: S.current.fires, bounds: CA, modelStatus: S.current.modelStatus, withModel: true })
-    if (seq !== liveSeq.current) return                           // a newer click already replaced this one
+    const d = await buildLive({ fires: S.current.fires, bounds: area.current, modelStatus: S.current.modelStatus, withModel: true, pick: pick.current })
+    if (seq !== liveSeq.current) return                           // a newer click or move already replaced this one
     while (busy.current) await sleep(80)                          // never rebuild the layout mid-transition
     setBusyText(null)
     const ci = d.items.findIndex((x) => x.clicked)
+    const ki = keepId ? d.items.findIndex((x) => x.id === keepId) : -1   // after a move, stay on the fire you had picked if it's still listed
     setLive(d)
     if (S.current.hz !== 'fire') return
-    const i = ci >= 0 ? ci : Math.min(selIdx, d.items.length - 1)
+    const i = ci >= 0 ? ci : ki >= 0 ? ki : Math.min(selIdx, d.items.length - 1)
     setSel(i)
     setAnnounce(`${d.items.length} spots shown. ${d.items[i].name}: fire-weather index ${d.items[i].prob}, ${RISK[d.items[i].risk]}.`)
   }
@@ -209,7 +225,7 @@ export default function App() {
         const f = await getFires()
         ms = await getModelStatus()
         S.current.fires = f; S.current.modelStatus = ms
-        const d = await buildLive({ fires: f, bounds: CA, modelStatus: ms, withModel: false })
+        const d = await buildLive({ fires: f, bounds: area.current, modelStatus: ms, withModel: false })
         setFires(f); setModelStatus(ms); setLive(d)
         ok = true
       } catch (err) {
@@ -233,6 +249,40 @@ export default function App() {
     ro.observe(app.current)
     return () => { ro.disconnect(); cancelAnimationFrame(raf) }
   }, [shown, map])                                                // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---------- the fire list follows the map, and a clicked fire joins it ----------
+  function visibleArea() {                                        // the part of the map the panels leave uncovered
+    const m = mapRef.current, { tl, br } = pads(), W = app.current.clientWidth, H = app.current.clientHeight
+    return L.latLngBounds(m.containerPointToLatLng(tl), m.containerPointToLatLng([W - br[0], H - br[1]]))
+  }
+  const liveMapOn = () => { const { hz, mode, D } = S.current; return hz === 'fire' && mode === 'live' && D.live && view.current === 'mv' }
+  useEffect(() => {
+    if (!map) return
+    const onMoveEnd = () => {                                     // you panned or zoomed: list the fires now in view
+      if (ownMove.current || busy.current || !liveMapOn()) return
+      clearTimeout(areaT.current)
+      areaT.current = setTimeout(() => {
+        if (ownMove.current || busy.current || !liveMapOn()) return
+        area.current = visibleArea()
+        if (pick.current && !area.current.contains(pick.current.latlng)) pick.current = null   // a clicked fire you moved away from leaves the list
+        const { D, sel } = S.current
+        refreshLive(0, D.items[sel] && D.items[sel].id)
+      }, 600)
+    }
+    const onClick = (e) => {                                      // a fire dot (within 10 px) or any other spot joins the list, as in the prototype
+      if (busy.current || !liveMapOn()) return
+      const at = map.latLngToContainerPoint(e.latlng)
+      let near = null, best = 10
+      for (const f of S.current.fires) { const d = at.distanceTo(map.latLngToContainerPoint([f.latitude, f.longitude])); if (d < best) { best = d; near = f } }
+      pick.current = near ? clusterAround(S.current.fires, near) : { latlng: [e.latlng.lat, e.latlng.lng], clickedSpot: true }
+      setFocus(false)
+      setBusyText(S.current.modelStatus.ready ? 'Running the spread model on the fire you clicked…' : 'Updating fires…')
+      refreshLive(0)
+    }
+    map.on('moveend', onMoveEnd)
+    map.on('click', onClick)
+    return () => { map.off('moveend', onMoveEnd); map.off('click', onClick); clearTimeout(areaT.current) }
+  }, [map])                                                       // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- the spread model on a past fire ----------
   const spSeq = useRef(0)
