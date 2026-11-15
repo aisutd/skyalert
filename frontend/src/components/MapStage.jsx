@@ -1,7 +1,7 @@
 // One React Leaflet map under both layouts. The overview clips it to its slot, so the map view only widens the clip.
 import { Fragment, memo, useMemo } from 'react'
 import L from 'leaflet'
-import { CircleMarker, ImageOverlay, MapContainer, Marker, Rectangle, SVGOverlay, TileLayer } from 'react-leaflet'
+import { CircleMarker, ImageOverlay, MapContainer, Marker, Pane, Rectangle, SVGOverlay, TileLayer } from 'react-leaflet'
 import { RISK } from '../lib/format.js'
 import { MODEL } from '../lib/model.js'
 import { US, heatURL } from '../lib/live.js'
@@ -88,7 +88,8 @@ export default function MapStage({ s, act, setMap }) {   // attribution is our o
           if (!it.fc || it.fc.status !== 'ok') return null
           const b = it.fc.bounds, on = i === s.sel
           // The selected fire: crisp pixels (likely, possible, its fire outlined), like the past-fire view; others: the heat map
-          return on ? <SelectedForecast key={`fc${i}`} fc={it.fc} theme={s.theme} />
+          // The selected forecast sits above the numbered markers (pane z 650 > markers 600), so a marker can't hide it
+          return on ? <Pane key={`fc${i}`} name="fc-selected" style={{ zIndex: 650, pointerEvents: 'none' }}><SelectedForecast fc={it.fc} theme={s.theme} /></Pane>
             : <ImageOverlay key={`fc${i}`} url={heatURL(it.fc)} bounds={[[b.south, b.west], [b.north, b.east]]} opacity={0.9} interactive={false} />
         })}
         {D.live && layers.observed && <FireDots fires={s.fires} />}

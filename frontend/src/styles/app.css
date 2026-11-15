@@ -505,3 +505,10 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
 @keyframes dot-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: .6; } }
 @media (prefers-reduced-motion: reduce) { .dot-ring.pending::after { animation: none; } }
 .fcb-wait { color: var(--muted); }
+/* The forecast close-up in the selected fire's panel */
+.fcb-row { display: grid; grid-template-columns: 132px 1fr; gap: 12px; align-items: start; }
+.fcb-zoom { margin: 0; display: grid; gap: 3px; }
+.fcb-zoom img { display: block; width: 132px; height: 132px; border-radius: 6px; border: 1px solid var(--line); image-rendering: pixelated; }
+.fcb-zoom figcaption { font-size: 10.5px; color: var(--muted); }
+.fcb-go { margin-top: 4px; padding: 5px 9px; border-radius: 8px; border: 1px solid var(--hz-deep); background: var(--surface); color: var(--hz-text); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.fcb-go:hover { background: var(--hz-pale); }

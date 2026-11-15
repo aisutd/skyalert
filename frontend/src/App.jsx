@@ -372,6 +372,16 @@ export default function App() {
       loadSpread(i)
     },
     setSpLayer(k, v) { setSpLayers((l) => ({ ...l, [k]: v })) },
+    zoomToForecast() {                                            // fly to the selected fire's 64 × 64 forecast area
+      const it = S.current.D.items[S.current.sel], m = mapRef.current
+      if (busy.current || !m || !it || !it.fc || it.fc.status !== 'ok') return
+      const b = it.fc.bounds, { tl, br } = pads()
+      ownMove.current = true                                      // the fire list stays as it is for this move
+      clearTimeout(ownMoveT.current)
+      ownMoveT.current = setTimeout(() => { ownMove.current = false }, 2000)
+      m.once('moveend', () => { clearTimeout(ownMoveT.current); ownMoveT.current = setTimeout(() => { ownMove.current = false }, 80) })
+      m.flyToBounds([[b.south, b.west], [b.north, b.east]], { paddingTopLeft: tl, paddingBottomRight: br, duration: REDUCE.matches ? 0 : 0.85 })
+    },
     selectTile(i) {
       if (busy.current) return
       setMSel(i)
