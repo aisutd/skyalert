@@ -176,10 +176,9 @@ def test_dashboard_contract_fields(stubbed):
     """Fields the dashboard's fire list reads (frontend/src/lib/live.js)."""
     result = sf.forecast(37.0, -119.0, fire_day=dt.date(2026, 11, 12))
     assert result["status"] == "ok" and result["missing_layers"] == []
-    probability = np.array(result["probability"])
-    # The clicked spot is the tile's centre pixel: row 32, column 31 when drawn north-up
-    near = probability[32 - sf.NEAR_PX : 32 + sf.NEAR_PX + 1, 31 - sf.NEAR_PX : 31 + sf.NEAR_PX + 1]
-    assert result["chance_near"] == pytest.approx(near.max(), abs=1e-3)
+    # chance_near is the calibrated version of the highest raw score near the spot
+    assert result["chance_near"] == pytest.approx(float(sf.calibrated("near", result["score_near"])), abs=2e-3)
+    assert 0 <= result["chance_near"] <= 1 and np.all((np.array(result["probability"]) >= 0) & (np.array(result["probability"]) <= 1))
     km2 = result["pixel_km"]["north_south"] * result["pixel_km"]["east_west"]
     assert result["fire_today_km2"] == pytest.approx(result["fire_today_pixels"] * km2, abs=0.2)
     assert result["predicted_km2"] == pytest.approx(result["forecast_pixels"] * km2, abs=0.2)
@@ -188,3 +187,13 @@ def test_dashboard_contract_fields(stubbed):
 def test_model_status_ready():
     status = sf.model_status()
     assert status["ready"] is True and status["model"] == "spread_v2" and 0 < status["threshold"] < 1
+
+
+def test_calibration_maps_are_monotone_and_honest():
+    """Higher score never means a lower chance, and the top of the map isn't 'certain' without evidence."""
+    for name in ("near", "pixel"):
+        x, y = sf.calibration()[name]
+        assert np.all(np.diff(x) >= 0) and np.all(np.diff(y) >= -1e-12), name
+        assert 0 <= y.min() and y.max() <= 1
+    # Fitted on 2023 fires: a raw score of 0.99 near a fire is far from a sure thing
+    assert sf.calibrated("near", 0.99) < 0.95

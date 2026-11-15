@@ -16,6 +16,7 @@ docs/spread_v2_test_results.txt; the headline numbers are in TEST_SCORES.
 """
 
 import datetime as dt
+import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -91,13 +92,33 @@ _day_lock = threading.Lock()
 _build_slots = threading.BoundedSemaphore(MAX_CONCURRENT_BUILDS)
 
 
+_calibration = {}
+
+
+def calibration():
+    """Score -> real chance maps fitted on the 2023 val fires (training/calibrate_v2.py)."""
+    if not _calibration:
+        data = json.loads((MODEL_DIR / "calibration.json").read_text())
+        if data["near_px"] != NEAR_PX:
+            raise ValueError(f"calibration.json was fitted for a {data['near_px']}-pixel window, not {NEAR_PX}")
+        _calibration.update({name: (np.asarray(data[name]["x"]), np.asarray(data[name]["y"])) for name in ("near", "pixel")})
+    return _calibration
+
+
+def calibrated(name, scores):
+    """The real chance for model scores, from the 'near' or 'pixel' map."""
+    x, y = calibration()[name]
+    return np.interp(scores, x, y)
+
+
 def model_status():
     """Whether the model can run (weights, stats and manifest in models/spread_v2), for /api/model-status."""
-    missing = [str(path.relative_to(REPO)) for path in (MODEL_DIR / name for name in ("weights.pt", "channel_stats.csv", "manifest.json")) if not path.exists()]
+    missing = [str(path.relative_to(REPO)) for path in (MODEL_DIR / name for name in ("weights.pt", "channel_stats.csv", "manifest.json", "calibration.json")) if not path.exists()]
     if missing:
         return {"ready": False, "missing": missing, "note": "The spread model files are missing from models/spread_v2."}
     try:
         _, _, manifest = load_run(MODEL_DIR)
+        calibration()
     except Exception as error:  # a broken file: say so instead of failing every request
         return {"ready": False, "missing": [], "note": f"Couldn't load the spread model: {type(error).__name__}: {error}"}
     return {"ready": True, "model": "spread_v2", "threshold": float(manifest["threshold"]), "missing_layers": []}
@@ -295,7 +316,7 @@ def forecast(lat, lon, fire_day=None):
 
     south, west, north, east = grid.bounds
     pixel_km2 = (grid.lat_step * 111.32) * (grid.lon_step * 111.32 * np.cos(np.radians((south + north) / 2)))
-    north_up = grid.to_north_up(probability)
+    north_up = grid.to_north_up(probability)  # raw model scores
     # The clicked spot is pixel [CENTER_INDEX, CENTER_INDEX] in model orientation: find it north-up
     rows, cols = grid.cell_of([lat], [lon])
     spot_row, spot_col = grid.size - 1 - rows[0] if grid.row0_is_south else rows[0], cols[0]
@@ -306,8 +327,9 @@ def forecast(lat, lon, fire_day=None):
         "forecast_day": (fire_day + dt.timedelta(days=1)).isoformat(),
         "bounds": {"south": south, "west": west, "north": north, "east": east},
         "size": grid.size,
-        # Rows run north to south, columns west to east, for drawing on a map
-        "probability": np.round(grid.to_north_up(probability), 3).tolist(),
+        # Rows run north to south, columns west to east, for drawing on a map. The real chance each
+        # pixel burns on forecast_day (the model's score, calibrated on the 2023 val fires)
+        "probability": np.round(calibrated("pixel", north_up), 3).tolist(),
         # 1 where the model forecasts fire (probability >= threshold), decided before rounding, so
         # the drawn pixels always agree with forecast_pixels
         "likely": grid.to_north_up(forecast_mask).astype(int).tolist(),
@@ -315,12 +337,16 @@ def forecast(lat, lon, fire_day=None):
         # Past days only: what actually burned on forecast_day (north-up), and this forecast's scores
         "actual": actual,
         "check": check,
+        # Cutoff on the model's raw score for "likely" (the `likely` mask and forecast_pixels use it)
         "threshold": threshold,
         "forecast_pixels": int(forecast_mask.sum()),
         "fire_today_pixels": int(today.sum()),
         "new_fire_pixels": int((forecast_mask & ~today).sum()),
         # Summary numbers the dashboard's fire list uses (frontend/src/lib/live.js)
-        "chance_near": round(float(near.max()), 3),
+        # Chance of any fire within NEAR_PX pixels (~2 km) of the spot on forecast_day, calibrated;
+        # score_near is the model's raw score it comes from
+        "chance_near": round(float(calibrated("near", near.max())), 3),
+        "score_near": round(float(near.max()), 3),
         "predicted_km2": round(float(forecast_mask.sum() * pixel_km2), 1),
         "fire_today_km2": round(float(today.sum() * pixel_km2), 1),
         "weather_days": info["weather_days"],
