@@ -170,3 +170,21 @@ def test_demo_example_matches_its_test_score():
     result = sf.forecast(44.2374468471588, -119.48264576420598, fire_day=dt.date(2024, 9, 4))
     assert result["check"]["model_iou"] == pytest.approx(0.604, abs=0.005)
     assert result["check"]["persistence_iou"] == pytest.approx(0.443, abs=0.005)
+
+
+def test_dashboard_contract_fields(stubbed):
+    """Fields the dashboard's fire list reads (frontend/src/lib/live.js)."""
+    result = sf.forecast(37.0, -119.0, fire_day=dt.date(2026, 11, 12))
+    assert result["status"] == "ok" and result["missing_layers"] == []
+    probability = np.array(result["probability"])
+    # The clicked spot is the tile's centre pixel: row 32, column 31 when drawn north-up
+    near = probability[32 - sf.NEAR_PX : 32 + sf.NEAR_PX + 1, 31 - sf.NEAR_PX : 31 + sf.NEAR_PX + 1]
+    assert result["chance_near"] == pytest.approx(near.max(), abs=1e-3)
+    km2 = result["pixel_km"]["north_south"] * result["pixel_km"]["east_west"]
+    assert result["fire_today_km2"] == pytest.approx(result["fire_today_pixels"] * km2, abs=0.2)
+    assert result["predicted_km2"] == pytest.approx(result["forecast_pixels"] * km2, abs=0.2)
+
+
+def test_model_status_ready():
+    status = sf.model_status()
+    assert status["ready"] is True and status["model"] == "spread_v2" and 0 < status["threshold"] < 1

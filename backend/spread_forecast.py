@@ -44,7 +44,11 @@ MODEL_DIR = REPO / "models" / "spread_v2"
 # within about 3 hours, so a UTC day is complete by about 03:00 UTC the next day.
 DAY_COMPLETE_HOUR_UTC = 4
 CACHE_SECONDS = 30 * 60
-CACHE_MAX_ENTRIES = 200  # forecasts kept in memory (each holds ~8k numbers)
+CACHE_MAX_ENTRIES = 200
+# The frontend asks for several fires at once; build at most this many at a time so FIRMS, gridMET
+# and the terrain tiles never see a burst of requests (each build makes about 20)
+MAX_CONCURRENT_BUILDS = 3
+NEAR_PX = 2  # "chance near the fire" = highest chance within this many pixels (~2 km) of the clicked spot  # forecasts kept in memory (each holds ~8k numbers)
 DAY_CACHE_SECONDS = 10 * 60  # nationwide NOAA-20 detections of a recent day (NRT can still grow)
 
 # docs/spread_v2_test_results.txt (4,000 test tiles from the 2024-2025 fire seasons, never used for
@@ -84,6 +88,19 @@ _cache = {}
 _cache_lock = threading.Lock()
 _day_cache = {}  # (FIRMS source, day) -> (fetched_at, NOAA-20 detections over the contiguous US)
 _day_lock = threading.Lock()
+_build_slots = threading.BoundedSemaphore(MAX_CONCURRENT_BUILDS)
+
+
+def model_status():
+    """Whether the model can run (weights, stats and manifest in models/spread_v2), for /api/model-status."""
+    missing = [str(path.relative_to(REPO)) for path in (MODEL_DIR / name for name in ("weights.pt", "channel_stats.csv", "manifest.json")) if not path.exists()]
+    if missing:
+        return {"ready": False, "missing": missing, "note": "The spread model files are missing from models/spread_v2."}
+    try:
+        _, _, manifest = load_run(MODEL_DIR)
+    except Exception as error:  # a broken file: say so instead of failing every request
+        return {"ready": False, "missing": [], "note": f"Couldn't load the spread model: {type(error).__name__}: {error}"}
+    return {"ready": True, "model": "spread_v2", "threshold": float(manifest["threshold"]), "missing_layers": []}
 
 
 def latest_fire_day(now=None):
@@ -231,7 +248,8 @@ def forecast(lat, lon, fire_day=None):
         if hit and time.time() - hit[0] < CACHE_SECONDS:
             return hit[1]
 
-    grid, inputs, info = build_inputs(lat, lon, fire_day)
+    with _build_slots:
+        grid, inputs, info = build_inputs(lat, lon, fire_day)
     model, stats, manifest = load_run(MODEL_DIR)
     channels = tuple(manifest["channels"])
     probability = predict(select_channels(inputs[None], channels), model, stats, channels)[0]
@@ -276,7 +294,14 @@ def forecast(lat, lon, fire_day=None):
             }
 
     south, west, north, east = grid.bounds
+    pixel_km2 = (grid.lat_step * 111.32) * (grid.lon_step * 111.32 * np.cos(np.radians((south + north) / 2)))
+    north_up = grid.to_north_up(probability)
+    # The clicked spot is pixel [CENTER_INDEX, CENTER_INDEX] in model orientation: find it north-up
+    rows, cols = grid.cell_of([lat], [lon])
+    spot_row, spot_col = grid.size - 1 - rows[0] if grid.row0_is_south else rows[0], cols[0]
+    near = north_up[max(0, spot_row - NEAR_PX) : spot_row + NEAR_PX + 1, max(0, spot_col - NEAR_PX) : spot_col + NEAR_PX + 1]
     result = {
+        "status": "ok",
         "fire_day": fire_day.isoformat(),
         "forecast_day": (fire_day + dt.timedelta(days=1)).isoformat(),
         "bounds": {"south": south, "west": west, "north": north, "east": east},
@@ -294,6 +319,12 @@ def forecast(lat, lon, fire_day=None):
         "forecast_pixels": int(forecast_mask.sum()),
         "fire_today_pixels": int(today.sum()),
         "new_fire_pixels": int((forecast_mask & ~today).sum()),
+        # Summary numbers the dashboard's fire list uses (frontend/src/lib/live.js)
+        "chance_near": round(float(near.max()), 3),
+        "predicted_km2": round(float(forecast_mask.sum() * pixel_km2), 1),
+        "fire_today_km2": round(float(today.sum() * pixel_km2), 1),
+        "weather_days": info["weather_days"],
+        "missing_layers": [],
         "pixel_km": {"north_south": round(grid.lat_step * 111.32, 3),
                      "east_west": round(grid.lon_step * 111.32 * np.cos(np.radians((south + north) / 2)), 3)},
         "inputs": info,

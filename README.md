@@ -4,12 +4,13 @@
 
 SkyAlert is a computer vision system for detecting wildfires and floods from satellite imagery. It uses a classifier to flag affected regions, a segmentation model to map damage at pixel level, and engineered satellite features to provide actionable information through an interactive dashboard.
 
-## Planned Technologies
+## Technologies
 
-- Python and JavaScript
-- Streamlit or Gradio with Folium
-- PyTorch, ResNet, U-Net, Rasterio, and scikit-learn
-- NASA FIRMS, DeepGlobe, Google Earth Engine, and Copernicus EMS
+- **Backend:** Python, FastAPI, pandas
+- **Frontend:** React + React Leaflet (the UI first built as the HTML prototype in `prototype/`)
+- **Models:** PyTorch U-Nets, trained on Kaggle GPUs
+- **Live data:** NASA FIRMS (VIIRS NOAA-20), Open-Meteo, GRIDMET, OpenStreetMap Nominatim, Esri map tiles
+- **Training data:** Landsat-8 Active Fire and Next Day Wildfire Spread (flood: Sen1Floods11 planned)
 
 ## Quick start
 
@@ -34,19 +35,40 @@ npm install                        # first time only
 npm run dev                        # prints the address to open
 ```
 
-Wait for Terminal 1 to print `Uvicorn running on http://127.0.0.1:8000`, then open the address Terminal 2 printed (usually **http://localhost:5173**). Full details and troubleshooting are below.
+Wait for Terminal 1 to print `Uvicorn running on http://127.0.0.1:8000`, then open the address Terminal 2 printed (usually **http://localhost:5173**). The badge at the top right should say **Live data**. If a banner says it's showing sample data, the backend isn't reachable. Full details and troubleshooting are below.
+
+## Live prototype (single page, no npm)
+
+`prototype/index.html` is the design prototype (overview that opens into the map) running on live data. The backend serves it, so only one terminal is needed:
+
+```bash
+source .venv/bin/activate
+python -m backend.dashboard
+```
+
+Then open **http://127.0.0.1:8000/prototype/**. Open it through this address, not by double-clicking the file: the page gets its data from `/api` on the same server, so from `file://` it falls back to sample data and shows a banner saying so.
+
+The first load can take several seconds while the backend downloads the fires from NASA and the weather for each one. After that the fires are cached for 10 minutes.
+
+The page has two views. The **overview** shows the riskiest fire in California as one big number, with the map in a box on the right. **Focus on the map** opens the map full screen, with three floating panels: the summary (top left), the selected fire and the list of fires (right) and the weather (bottom). **Overview**, or `Esc`, goes back.
+
+- **Fire** is live: today's NASA FIRMS detections across the US (red dots) and the 8 strongest fires in California, numbered on the map. Each one gets its place name, weather and the Fosberg fire-weather index from `/api/fire-context`, and the list is sorted by that index. Detections within 15 km of each other count as one fire. Click a fire dot or any other spot on the map to add it to the list and see its weather.
+- **Flood** is still sample data.
+- **Model on a past fire** (button on the overview, or the switch in the map view) draws the fire detector's output on the map at its real location: 4 Landsat-8 tiles in Sequoia National Forest, Aug 27, 2020, placed by matching them against Landsat scene 042/035 from that day. The spread predictor's examples are shown in the bottom panel, not on the map, because their test data has no locations.
+- **Model results** (chart button) has the same results as a popup, plus the training-data stats. Images are in `prototype/model_results/`.
+- **Spread model on today's data:** put `spread_unet.pt` and `spread_feature_stats.csv` from Kaggle in `data/training/` and restart the backend. The page then shows the model's chance of fire tomorrow for each fire (big number, list and a heat-map layer) instead of the fire-weather index. `backend/spread_forecast.py` builds the model's 12 inputs from FIRMS, GRIDMET and elevation tiles, and loads the model code from `notebooks/train_spread.ipynb`, like `demos/spread_examples.py`. NDVI and population aren't filled yet (they need a NASA Earthdata login), so they get the training average, as the training code does for missing pixels. Without the files, the page says it's waiting for the weights.
 
 ## Running SkyAlert from scratch
 
 SkyAlert has two parts that run at the same time:
 
-- **Backend** (Python, data only): `backend/firms_client.py` fetches fire detections from NASA FIRMS, `backend/data_cleaning.py` cleans them, `main.py` chains the two, `backend/fire_context.py` gets the weather and place name for the fire popup, and `backend/dashboard.py` (FastAPI) serves it all as JSON on port 8000.
-- **Frontend** (React, all the UI): `frontend/` draws the dashboard on port 5173: stat cards, the fire map with a popup and heatmap, and the Analytics table. It gets every piece of data from the backend through `frontend/src/lib/api.js`.
+- **Backend** (Python, data only): `backend/firms_client.py` fetches fire detections from NASA FIRMS, `backend/data_cleaning.py` cleans them, `main.py` chains the two, `backend/fire_context.py` gets the weather and place name for each fire, `backend/spread_forecast.py` runs the spread model on live inputs, and `backend/dashboard.py` (FastAPI) serves it all as JSON on port 8000. It also serves the live prototype at `/prototype/`.
+- **Frontend** (React, all the UI): `frontend/` runs on port 5173. It opens on the overview (today's top fire, its fire-weather index and weather); "Focus on the map" morphs into the full map view with the fire list, weather panel and the model on a past fire. Flood shows sample data until there's a flood model. Every backend call is in `frontend/src/lib/api.js`.
 
 ### 1. Install the tools (once per computer)
 
-- **Python 3.10 or newer** (tested on 3.12). Check with `python3 --version`.
-- **Node.js 20.19+ or 22.12+** (needed by Vite). Check with `node --version`.
+- **Python 3.10 or newer** (tested on 3.12 and 3.13). Check with `python3 --version`.
+- **Node.js 20.19+ or 22.12+** (needed by Vite; also works on 25). Check with `node --version`.
 - **Git**
 
 ### 2. Get the code
@@ -137,12 +159,16 @@ This fetches and cleans the fires and prints the first few rows. No server or br
 | Problem | Fix |
 |---|---|
 | `FIRMS_MAP_KEY is not set` | Do step 3: create `.env` in the `skyalert` folder with your key. |
-| Dashboard opens but shows "Couldn't load stats" or no fire dots | The backend isn't running. Start Terminal 1 and refresh. |
+| Banner says "Live data isn't available… so this is sample data" | The backend isn't running or crashed. Start Terminal 1, wait for the Uvicorn line, then refresh. |
 | `ModuleNotFoundError: No module named 'backend'` | You're inside the `backend/` folder. Run `cd ..` to get back to `skyalert`, then `python -m backend.dashboard`. |
 | `python dashboard.py` says "No such file" | The server moved to `backend/`. Use `python -m backend.dashboard` from the `skyalert` folder. |
-| Map shows a 502 error for fire detections | The frontend can't reach the backend. Start Terminal 1 (or check it didn't crash), wait for the Uvicorn line, then refresh. |
+| `http://127.0.0.1:5173` doesn't load | Vite listens on `localhost` (IPv6), not `127.0.0.1`. Use **http://localhost:5173**. |
 | `Address already in use` (port 8000 or 5173) | The backend or frontend is already running in another terminal. Use that one or stop it first. |
 | `npm run dev` complains about the Node version | Install Node.js 20.19+ or 22.12+. |
+| Prototype shows "Live data isn't available… sample data" | The backend isn't running, or the page was opened as a file. Start the backend and open http://127.0.0.1:8000/prototype/. |
+| Prototype says "Waiting for weights" | Expected until `spread_unet.pt` and `spread_feature_stats.csv` are in `data/training/`. Everything else works without them. |
+| Prototype says "Inputs unavailable" | The weights are there, but GRIDMET didn't answer. Try again later; the fire-weather index is still shown. |
+| 0 fires, or far fewer than usual | Check `FIRMS_SOURCE` in `main.py`. A satellite can stop sending data (SNPP did after 2026-11-02); switch to another VIIRS source such as `VIIRS_NOAA20_NRT` or `VIIRS_NOAA21_NRT`. |
 
 See `APIS.md` for every API the project calls and exposes.
 
@@ -256,7 +282,10 @@ backend/                      FIRMS client, cleaning, fire context, spread forec
 models/spread_v2/             The live next-day spread model (weights, stats, threshold)
 training/                     Build the v2 dataset, train, and evaluate the spread model
 tests/                        pytest (python -m pytest tests; add --network for live-service tests)
-frontend/                     React dashboard
+prototype/index.html          Live single-page prototype, served at /prototype/
+prototype/model_results/      Detector and spread-model images used by the prototype
+frontend/                     React app: src/App.jsx (state + overview ⇄ map morph), src/components/, src/lib/ (API, live data, sample data)
+frontend/public/model_results/ Detector and spread-model images used by the React app
 APIS.md                       Every API the project calls and exposes
 docs/integration.md           How fetch, cleaning, map, and dashboard fit together
 notebooks/fires.ipynb         FIRMS data exploration
@@ -274,14 +303,8 @@ docs/figures/                 Demo figures for presentations
 data/                         Downloaded datasets and trained weights, not committed
 ```
 
-## Docker Setup
+## Docker (not needed yet)
 
-Make sure Docker Desktop is installed and running.
+You do not need Docker to run anything in this repo. Use the Quick start steps above instead.
 
-```bash
-docker compose up -d
-docker compose down
-docker compose ps
-```
-
-This is a generic starter configuration. The team can add project-specific dependencies and startup commands later.
+`docker-compose.yml` is an empty placeholder. It starts a bare Linux container with no Python and no project code running, so it cannot run the backend, the frontend, or the notebooks. It is kept so the team can turn it into a real setup later.
