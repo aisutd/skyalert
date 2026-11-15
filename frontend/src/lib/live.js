@@ -86,11 +86,12 @@ export const seriesFor = (D, sel) => (D.live ? seriesOf(D.items[sel]) : D.series
 
 // the sentence for one fire, shown in the right box above its details
 export function selHeadline(D, it) {
+  if (it.pending) return `Running the spread model near ${it.name}…`
   return D.modelReady ? `Chance of fire on ${D.forecastDay}: ${it.prob}% near ${it.name}` : `Fire weather is ${RISK[it.risk].toLowerCase()} near ${it.name}`
 }
 
 function liveData(items, total, modelStatus) {
-  const top = items.reduce((a, b) => (b.prob > a.prob ? b : a), items[0])
+  const ready = items.filter((x) => !x.pending), top = (ready.length ? ready : items).reduce((a, b) => (b.prob > a.prob ? b : a))
   const anyFire = items.some((x) => !x.picked)
   const ran = items.find((x) => x.fc && x.fc.status === 'ok'), m = modelStatus.ready && !!ran   // the model ran on the latest data
   // The forecast is for the day after the latest complete day of satellite data: usually today, so say the date
@@ -110,8 +111,10 @@ function liveData(items, total, modelStatus) {
   }
 }
 
-// pick: a clicked fire (clusterAround) or spot ({ latlng, clickedSpot: true }); it joins the list, marked `clicked`
-export async function buildLive({ fires, bounds, modelStatus, withModel, pick = null }) {
+// pick: a clicked fire (clusterAround) or spot ({ latlng, clickedSpot: true }); it joins the list, marked `clicked`.
+// withModel: true = wait for every forecast; 'cached' = reuse the forecasts already in `reuse` (the current list)
+// and mark the rest `pending`, so a clicked fire shows at once and its forecast fills in on the next build.
+export async function buildLive({ fires, bounds, modelStatus, withModel, pick = null, reuse = [] }) {
   const { clusters, total } = clustersIn(fires, bounds)
   let items = await Promise.all(clusters.map(async (c) => toItem(c, await getFireContext(...c.latlng))))
   if (pick) {                                                     // the spot or fire dot you clicked joins the list (as in the prototype)
@@ -120,8 +123,15 @@ export async function buildLive({ fires, bounds, modelStatus, withModel, pick = 
     items = items.filter((x) => kmBetween(x.latlng, it.latlng) >= CLUSTER_KM).concat(it)
   }
   if (!items.length) { const c = L.latLngBounds(bounds).getCenter(); items = [toItem({ latlng: [c.lat, c.lng] }, await getFireContext(c.lat, c.lng), true)] }
-  if (withModel && modelStatus.ready) await Promise.all(items.map(applyForecast))
-  items.sort((a, b) => b.prob - a.prob)                           // highest first
+  if (withModel === 'cached') {
+    const prev = new Map(reuse.map((x) => [x.id, x]))
+    for (const it of items) {
+      const p = prev.get(it.id)
+      if (p && p.fc) Object.assign(it, { fc: p.fc, prob: p.prob, risk: p.risk })
+      else if (modelStatus.ready) it.pending = true
+    }
+  } else if (withModel && modelStatus.ready) await Promise.all(items.map(applyForecast))
+  items.sort((a, b) => (a.pending - b.pending) || b.prob - a.prob)   // highest first; ones still being forecast last
   return liveData(items, total, modelStatus)
 }
 

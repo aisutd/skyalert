@@ -197,3 +197,19 @@ def test_calibration_maps_are_monotone_and_honest():
         assert 0 <= y.min() and y.max() <= 1
     # Fitted on 2023 fires: a raw score of 0.99 near a fire is far from a sure thing
     assert sf.calibrated("near", 0.99) < 0.95
+
+
+def test_note_when_the_area_has_no_weather(stubbed, monkeypatch):
+    """A fire past the border (no gridMET there) must say its weather was filled with averages."""
+    nan = np.full((64, 64), np.nan, dtype=np.float32)
+    monkeypatch.setattr(sf._weather, "wind_layers", lambda grid, days: (nan, nan))
+    monkeypatch.setattr(sf._weather, "weather_layer", lambda grid, var, days: nan)
+    monkeypatch.setattr(sf.gridmet, "pdsi_layer", lambda grid, day: (nan, {"pentad_date": "2026-11-06"}))
+    result = sf.forecast(37.0, -119.0, fire_day=dt.date(2026, 11, 12))
+    assert result["inputs"]["weather_missing_share"] == 1.0
+    assert any("outside gridMET" in note and "100%" in note for note in result["notes"])
+
+
+def test_no_weather_note_inside_the_us(stubbed):
+    result = sf.forecast(37.0, -119.0, fire_day=dt.date(2026, 11, 12))
+    assert result["inputs"]["weather_missing_share"] == 0.0 and not any("outside gridMET" in n for n in result["notes"])

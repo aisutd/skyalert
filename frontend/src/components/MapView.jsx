@@ -133,7 +133,7 @@ function LivePanels({ s, act }) {
       <dl className="selp-dl pc">
         {D.live ? <>
           <div><dt>Fire-weather index</dt><dd><AnimText className="fwi-n" value={it.fwi} /> / 100</dd></div>
-          <div><dt>Model: fire {D.forecastDay ? `on ${D.forecastDay}` : 'next day'}</dt><dd>{it.fc && it.fc.status === 'ok' ? `${it.prob}% within 2 km` : s.modelStatus.ready ? 'Inputs unavailable' : 'Waiting for weights'}</dd></div>
+          <div><dt>Model: fire {D.forecastDay ? `on ${D.forecastDay}` : 'next day'}</dt><dd>{it.pending ? 'Running the model…' : it.fc && it.fc.status === 'ok' ? `${it.prob}% within 2 km` : s.modelStatus.ready ? 'Inputs unavailable' : 'Waiting for weights'}</dd></div>
           <div><dt>{D.metricName}</dt><dd>{it.metric}</dd></div><div><dt>Evidence</dt><dd>{it.evidence}</dd></div>
         </> : <>
           <div><dt>Probability</dt><dd>{it.prob}%</dd></div><div><dt>Confidence</dt><dd>{it.conf}%</dd></div>
@@ -142,13 +142,14 @@ function LivePanels({ s, act }) {
       </dl>
       <p className="selp-win pc">{it.window}</p>
       {D.live && it.fc && it.fc.status === 'ok' && <ForecastBox fc={it.fc} />}
+      {D.live && it.pending && <p className="fcb fcb-s pc" role="status">Running the spread model on this fire. Its forecast appears here in a few seconds.</p>}
       {D.live && it.reasons && it.reasons.length > 0 && <ul className="rs pc" aria-label="Why this risk level">{it.reasons.map((r, i) => <li key={i} className={`rs-${r.effect}`}>{r.text}</li>)}</ul>}
       <hr className="pc" />
       <h4 className="fp-h pc">{D.listTitle || `All cells, ${D.window.toLowerCase()}`}</h4>
       <ul className="its">
         {D.items.map((x, i) => (
           <li key={i}><button type="button" className={`it${i === sel ? ' on' : ''}`} data-k={`cell-${i}`} data-sel={i} aria-pressed={i === sel} onClick={() => act.select(i)}>
-            <span className="it-n">{i + 1}</span><span className="it-name">{x.name}<small>{x.id}</small></span><Risk l={x.risk} cls="bare" /><span className="it-p">{x.prob}{D.live && !D.modelReady ? '' : '%'}</span>
+            <span className="it-n">{i + 1}</span><span className="it-name">{x.name}<small>{x.id}</small></span><Risk l={x.risk} cls="bare" /><span className="it-p">{x.pending ? '…' : <>{x.prob}{D.live && !D.modelReady ? '' : '%'}</>}</span>
           </button></li>
         ))}
       </ul>

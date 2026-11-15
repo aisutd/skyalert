@@ -49,7 +49,11 @@ CACHE_MAX_ENTRIES = 200
 # The frontend asks for several fires at once; build at most this many at a time so FIRMS, gridMET
 # and the terrain tiles never see a burst of requests (each build makes about 20)
 MAX_CONCURRENT_BUILDS = 3
-NEAR_PX = 2  # "chance near the fire" = highest chance within this many pixels (~2 km) of the clicked spot  # forecasts kept in memory (each holds ~8k numbers)
+NEAR_PX = 2  # "chance near the fire" = highest chance within this many pixels (~2 km) of the clicked spot
+WEATHER_CHANNELS = ("wind_u", "wind_v", "tmmn", "tmmx", "sph", "pr", "erc", "pdsi")
+# gridMET covers the contiguous US only; fires just over the border (FIRMS's box reaches into Canada
+# and Mexico) get the training average instead of weather. Say so when this share of the area has none.
+WEATHER_MISSING_NOTE_AT = 0.25  # forecasts kept in memory (each holds ~8k numbers)
 DAY_CACHE_SECONDS = 10 * 60  # nationwide NOAA-20 detections of a recent day (NRT can still grow)
 
 # docs/spread_v2_test_results.txt (4,000 test tiles from the 2024-2025 fire seasons, never used for
@@ -279,11 +283,16 @@ def forecast(lat, lon, fire_day=None):
     today = inputs[CHANNELS.index("fire_t")] == 1
 
     weather_lag = (fire_day - dt.date.fromisoformat(info["weather_days"][-1])).days
+    missing_weather = float(np.isnan(np.stack([inputs[CHANNELS.index(name)] for name in WEATHER_CHANNELS])).mean())
+    info["weather_missing_share"] = round(missing_weather, 3)
     notes = []
     if info["detections"]["t"] == 0:
         notes.append(f"NOAA-20 saw no fire in this area on {fire_day.isoformat()}, so the forecast starts from no fire.")
     if weather_lag > -WEATHER_OFFSETS[-1]:
         notes.append(f"gridMET weather is {weather_lag} days old (the model was trained on 1-day-old weather).")
+    if missing_weather >= WEATHER_MISSING_NOTE_AT:
+        notes.append(f"{missing_weather:.0%} of this area is outside gridMET's US weather coverage, so the model used average "
+                     "weather there. Treat this forecast with extra caution.")
     if info["weather_note"]:
         notes.append(info["weather_note"])
     if info["missing_layers"]:

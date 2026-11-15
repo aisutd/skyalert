@@ -69,3 +69,16 @@ All steps are done and verified in Chrome:
 Found while checking: Sneha's `.lm-mk { position: relative; }` stacked Leaflet's marker icons, so
 numbered marker n was drawn 12 px × (n − 1) south of its fire (marker 9 was 96 px off). It's now
 `position: absolute`; every marker lands within 1 px of its fire.
+
+## Clicking fire dots (2026-11-14, after user feedback: "hard to click, have to zoom in a lot")
+
+Measured before the fix: clicks did register, but there was no sign a dot was clickable (the cursor stayed
+a grab hand, no hover), and nothing visible happened for about 2.7 s, until the place, weather and forecast
+had all loaded. Dots in the overview's small map couldn't be clicked at all. Now:
+- Pointer cursor and a ring on hover; the nearest dot within 14 px counts. Screen positions are cached per
+  map view, so hovering stays cheap with thousands of dots.
+- Click → a pulsing ring on the dot at once (0.15 s) → the fire joins the list, selected, with place and
+  weather (0.7 s; existing forecasts reused) → its forecast fills in (about 2.6 s).
+- A dot clicked in the overview opens the map view on that fire.
+- Fires just over the border (FIRMS's box reaches into Canada and Mexico) have no gridMET weather; the
+  forecast now says what share of its area used average weather when that's 25% or more.

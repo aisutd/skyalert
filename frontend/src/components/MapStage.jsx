@@ -73,6 +73,9 @@ function SpreadPast({ fc, layers, theme }) {                     // the spread m
   </>
 }
 
+const RING = L.divIcon({ className: 'dot-ring', iconSize: [20, 20], iconAnchor: [10, 10] })
+const RING_PENDING = L.divIcon({ className: 'dot-ring pending', iconSize: [20, 20], iconAnchor: [10, 10] })
+
 export default function MapStage({ s, act, setMap }) {   // attribution is our own .attr line, so Leaflet's is off
   const { D, hz, mode, layers } = s
   const modelMode = hz === 'fire' && mode === 'model', spreadMode = hz === 'fire' && mode === 'spread'
@@ -89,6 +92,9 @@ export default function MapStage({ s, act, setMap }) {   // attribution is our o
             : <ImageOverlay key={`fc${i}`} url={heatURL(it.fc)} bounds={[[b.south, b.west], [b.north, b.east]]} opacity={0.9} interactive={false} />
         })}
         {D.live && layers.observed && <FireDots fires={s.fires} />}
+        {/* The dot under the pointer (it can be clicked) and the one you just clicked while it loads */}
+        {D.live && s.hoverDot && <Marker position={s.hoverDot} icon={RING} interactive={false} keyboard={false} />}
+        {D.live && s.pendingDot && <Marker position={s.pendingDot} icon={RING_PENDING} interactive={false} keyboard={false} zIndexOffset={1000} />}
         {!D.live && <SampleRaster hz={hz} layers={layers} />}
         <NumberedMarkers D={D} hz={hz} sel={s.sel} focus={s.focus} onSelect={act.select} />
       </>}

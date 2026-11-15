@@ -32,6 +32,8 @@ export default function App() {
   const [spSel, setSpSel] = useState(0)                           // which past fire the spread model is shown on (lib/spreadExamples.js)
   const [spFc, setSpFc] = useState(null)                          // its forecast from /api/spread-forecast?day=, null while loading
   const [spLayers, setSpLayers] = useState({ today: true, forecast: true, actual: true })
+  const [hoverDot, setHoverDot] = useState(null)                  // [lat, lon] of the fire dot under the pointer (clickable)
+  const [pendingDot, setPendingDot] = useState(null)              // [lat, lon] of the dot you clicked, while it loads
   const [live, setLive] = useState(null)                          // today's fire data, built from /api/fires + /api/fire-context
   const [fires, setFires] = useState([])
   const [modelStatus, setModelStatus] = useState({ ready: false })
@@ -199,11 +201,13 @@ export default function App() {
   }
 
   // ---------- live data ----------
-  async function refreshLive(selIdx = 0, keepId = null) {
+  // opts.cached: reuse the forecasts already shown and mark new fires as still running (fast); opts.busy: the status text
+  async function refreshLive(selIdx = 0, keepId = null, opts = {}) {
     const seq = ++liveSeq.current
-    setBusyText((t) => (t && t.startsWith('Running') ? t : 'Updating fires…'))
-    const d = await buildLive({ fires: S.current.fires, bounds: area.current, modelStatus: S.current.modelStatus, withModel: true, pick: pick.current })
-    if (seq !== liveSeq.current) return                           // a newer click or move already replaced this one
+    setBusyText((t) => opts.busy || (t && t.startsWith('Running') ? t : 'Updating fires…'))
+    const d = await buildLive({ fires: S.current.fires, bounds: area.current, modelStatus: S.current.modelStatus,
+      withModel: opts.cached ? 'cached' : true, reuse: S.current.D.items || [], pick: pick.current })
+    if (seq !== liveSeq.current) return false                     // a newer click or move already replaced this one
     while (busy.current) await sleep(80)                          // never rebuild the layout mid-transition
     setBusyText(null)
     const ci = d.items.findIndex((x) => x.clicked)
@@ -212,7 +216,8 @@ export default function App() {
     if (S.current.hz !== 'fire') return
     const i = ci >= 0 ? ci : ki >= 0 ? ki : Math.min(selIdx, d.items.length - 1)
     setSel(i)
-    setAnnounce(`${d.items.length} spots shown. ${d.items[i].name}: fire-weather index ${d.items[i].prob}, ${RISK[d.items[i].risk]}.`)
+    setAnnounce(`${d.items.length} spots shown. ${d.items[i].name}: ${d.items[i].pending ? 'forecast running' : `${d.items[i].prob} percent`}, ${RISK[d.items[i].risk]}.`)
+    return true
   }
 
   const started = useRef(false)
@@ -256,6 +261,23 @@ export default function App() {
     return L.latLngBounds(m.containerPointToLatLng(tl), m.containerPointToLatLng([W - br[0], H - br[1]]))
   }
   const liveMapOn = () => { const { hz, mode, D } = S.current; return hz === 'fire' && mode === 'live' && D.live && view.current === 'mv' }
+  const dotsOn = () => { const { hz, mode, D } = S.current; return hz === 'fire' && mode === 'live' && D.live }   // fire dots can be clicked (either view)
+  const HIT_PX = 14                                               // a dot counts as clicked or hovered within this many pixels; the nearest wins
+  const dotPts = useRef(null)                                     // every fire dot's screen position, worked out once per map view
+  function nearestDot(point) {
+    const m = mapRef.current, fires = S.current.fires
+    if (!dotPts.current || dotPts.current.fires !== fires) dotPts.current = { fires, pts: fires.map((f) => m.latLngToContainerPoint([f.latitude, f.longitude])) }
+    let near = null, best = HIT_PX * HIT_PX
+    dotPts.current.pts.forEach((p, i) => { const dx = p.x - point.x, dy = p.y - point.y, d = dx * dx + dy * dy; if (d < best) { best = d; near = fires[i] } })
+    return near
+  }
+  async function loadPick() {                                     // a clicked fire: in the list at once, its forecast right after
+    const mine = pick.current
+    setPendingDot(mine.latlng)
+    const ok = await refreshLive(0, null, { cached: true, busy: 'Loading the fire you clicked…' })
+    if (ok && pick.current === mine && S.current.modelStatus.ready) await refreshLive(0, null, { busy: 'Running the spread model on the fire you clicked…' })
+    if (pick.current === mine) setPendingDot(null)                 // a newer click owns the ring otherwise
+  }
   useEffect(() => {
     if (!map) return
     const onMoveEnd = () => {                                     // you panned or zoomed: list the fires now in view
@@ -269,19 +291,38 @@ export default function App() {
         refreshLive(0, D.items[sel] && D.items[sel].id)
       }, 600)
     }
-    const onClick = (e) => {                                      // a fire dot (within 10 px) or any other spot joins the list, as in the prototype
-      if (busy.current || !liveMapOn()) return
-      const at = map.latLngToContainerPoint(e.latlng)
-      let near = null, best = 10
-      for (const f of S.current.fires) { const d = at.distanceTo(map.latLngToContainerPoint([f.latitude, f.longitude])); if (d < best) { best = d; near = f } }
+    const onClick = (e) => {                                      // a fire dot (nearest within 14 px) or any other spot joins the list, as in the prototype
+      if (busy.current || !dotsOn()) return
+      const near = nearestDot(e.containerPoint)
+      if (view.current === 'ov' && !near) return                  // in the overview's small map, only fire dots react
       pick.current = near ? clusterAround(S.current.fires, near) : { latlng: [e.latlng.lat, e.latlng.lng], clickedSpot: true }
+      setHoverDot(null)
       setFocus(false)
-      setBusyText(S.current.modelStatus.ready ? 'Running the spread model on the fire you clicked…' : 'Updating fires…')
-      refreshLive(0)
+      if (view.current === 'ov') go('mv')                         // a dot clicked in the overview opens the map view on it
+      loadPick()
     }
+    let raf = 0, last = null
+    const onMouseMove = (e) => {                                  // pointer + ring when a dot is within reach
+      last = e.containerPoint
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        const near = !busy.current && dotsOn() && !map.dragging?.moving?.() ? nearestDot(last) : null
+        map.getContainer().classList.toggle('dot-hover', !!near)
+        setHoverDot((h) => (near ? (h && h[0] === near.latitude && h[1] === near.longitude ? h : [near.latitude, near.longitude]) : null))
+      })
+    }
+    const onMouseOut = () => { map.getContainer().classList.remove('dot-hover'); setHoverDot(null) }
+    const forget = () => { dotPts.current = null }                // dots moved on screen: re-project on the next hover
     map.on('moveend', onMoveEnd)
     map.on('click', onClick)
-    return () => { map.off('moveend', onMoveEnd); map.off('click', onClick); clearTimeout(areaT.current) }
+    map.on('mousemove', onMouseMove)
+    map.on('mouseout', onMouseOut)
+    map.on('move zoom resize viewreset', forget)
+    return () => {
+      map.off('moveend', onMoveEnd); map.off('click', onClick); map.off('mousemove', onMouseMove); map.off('mouseout', onMouseOut)
+      map.off('move zoom resize viewreset', forget); clearTimeout(areaT.current); cancelAnimationFrame(raf)
+    }
   }, [map])                                                       // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- the spread model on a past fire ----------
@@ -366,7 +407,7 @@ export default function App() {
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
-  const s = { D, hz, sel, focus, mode, mSel, layers, mLayers, theme, fires, modelStatus, spSel, spFc, spLayers }
+  const s = { D, hz, sel, focus, mode, mSel, layers, mLayers, theme, fires, modelStatus, spSel, spFc, spLayers, hoverDot, pendingDot }
   return <>
     {shown && (
       <div className="app" ref={app} data-hz={hz}>

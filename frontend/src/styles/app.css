@@ -495,3 +495,13 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
 .fcb-k b { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 .fcb-s { font-size: 12px; color: var(--muted); }
 .fcb-note { color: var(--ink-2); }
+
+/* Clicking fire dots (App.jsx nearestDot): pointer + ring when a dot is within reach, pulsing ring while it loads */
+.lmap.dot-hover, .lmap.dot-hover .leaflet-pane, .lmap.dot-hover canvas { cursor: pointer; }
+/* Leaflet positions the icon with `transform`, so the visible ring (and its animation) lives on ::after */
+.dot-ring { pointer-events: none; }
+.dot-ring::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--ink); background: color-mix(in srgb, var(--surface) 25%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--surface) 80%, transparent); }
+.dot-ring.pending::after { border-color: var(--hz-deep); animation: dot-pulse 1s ease-in-out infinite; }
+@keyframes dot-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: .6; } }
+@media (prefers-reduced-motion: reduce) { .dot-ring.pending::after { animation: none; } }
+.fcb-wait { color: var(--muted); }
