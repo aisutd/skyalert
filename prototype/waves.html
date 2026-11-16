@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waves</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { background: #e3effa; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const cv = document.getElementById('c'), cx = cv.getContext('2d')
+// colours from the top layer down: light at the top, dark at the bottom
+const COLORS = ['#d7e8f7', '#cbe1f4', '#b0d0ee', '#8cbbe4', '#5e9bd2', '#3576b6', '#1d5292', '#0f3366']
+const LEN = 480, AMP = 22   // every wave has the same length and height
+function draw() {
+  const dpr = devicePixelRatio || 1, W = innerWidth, H = innerHeight
+  cv.width = W * dpr; cv.height = H * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  const gap = H / (COLORS.length + 1), k = 2 * Math.PI / LEN
+  COLORS.forEach((c, i) => {
+    const base = gap * (i + 1.4), ph = -Math.min(i, COLORS.length - 1 - i) * Math.PI / 3   // evenly spaced; crests step right for the top half, then back left (a zigzag)
+    cx.beginPath(); cx.moveTo(0, H)
+    for (let x = 0; x <= W + 4; x += 4) cx.lineTo(x, base + Math.sin(x * k + ph) * AMP)
+    cx.lineTo(W, H); cx.closePath(); cx.fillStyle = c; cx.fill()
+  })
+}
+addEventListener('resize', draw); draw()
+</script>
+</body>
+</html>
