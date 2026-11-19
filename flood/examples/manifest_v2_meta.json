@@ -3,21 +3,21 @@
   "repo": "links-ads/geoid-flood",
   "revision": "v1.1",
   "license": "CC BY 4.0 (labels, splits); contains modified Copernicus Sentinel-1 data and CEMS Rapid Mapping products, (c) European Union",
-  "created_utc": "2026-11-19T02:51:22+00:00",
+  "created_utc": "2026-11-19T03:40:33+00:00",
   "split_method": "connected components of event_id and GEOID touching-AoI cluster_id, seeded hash order, 70/10/20 by tile count; GEOID-Flood held-out tree (EMSR857-871, 2026) as 'heldout'",
   "split_seed": "skyalert-flood-v1",
-  "split_version": "453b236e65a7",
+  "split_version": "fb68396f3ef4",
   "split_tiles_available": {
-    "train": 7498,
+    "train": 5916,
+    "val": 2849,
     "test": 2170,
-    "heldout": 1301,
-    "val": 1267
+    "heldout": 1301
   },
   "split_events_available": {
     "heldout": 9,
     "test": 51,
-    "train": 146,
-    "val": 13
+    "train": 119,
+    "val": 40
   },
   "footprint_overlaps_across_splits": {
     "train->val": 0,
@@ -27,8 +27,8 @@
   "heldout_tiles_dropped_for_overlap": 362,
   "selection": {
     "budgets": {
-      "train": 240,
-      "val": 50,
+      "train": 300,
+      "val": 150,
       "test": 110,
       "heldout": 50
     },
@@ -42,15 +42,18 @@
     "flooded_if_flood_frac_over": 0.01
   },
   "selected_tiles": {
-    "train": 240,
+    "train": 300,
+    "val": 150,
     "test": 110,
-    "heldout": 50,
-    "val": 50
+    "heldout": 50
   },
   "selected_events": {
     "heldout": 7,
     "test": 47,
-    "train": 130,
-    "val": 13
-  }
+    "train": 109,
+    "val": 38
+  },
+  "val_grown_to_events": 40,
+  "train_groups_moved_to_val": 15,
+  "eval_tiles_pinned_from": "data/flood/geoid/manifest.csv"
 }

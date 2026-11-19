@@ -1,9 +1,9 @@
 {
-  "prediction_id": "bde41956-3b9b-5329-a78e-0177b57a3423",
+  "prediction_id": "d4b69fe0-fe24-5d6f-a6ae-4c7329b9f44d",
   "hazard": "flood",
   "task": "detection",
   "product": "observed flood extent at acquisition time (not a forecast)",
-  "model_version": "flood-unet-20261119T025417Z-107bfbad",
+  "model_version": "flood-unet-v2-20261119T034731Z-b5de5fba",
   "preprocessing_version": "s1grd-post-db-v1",
   "input_ids": [
     "GEOID-Flood v1.1:EMSR501-1-9",
@@ -11,13 +11,14 @@
     "S1B_IW_GRDH_1SDV_20210212T163221_20210212T163246_025576_030C3D_6101_COG"
   ],
   "acquisition_time_utc": "2021-02-12T16:32:21+00:00",
-  "generated_at_utc": "2026-11-19T03:10:04+00:00",
+  "generated_at_utc": "2026-11-19T05:29:34+00:00",
   "valid_coverage": 0.9793,
   "output_units": {
     "raster": "class codes 0 background, 1 permanent water, 2 flooded water, 255 no data",
     "area": "km2"
   },
   "scores_are_probabilities": false,
+  "decision": "model; flood score >= 47/255, chosen on val by F2 (recall-weighted)",
   "label_semantics": "0 background, 1 permanent water, 2 flooded water (water outside the permanent-water reference at the post-event acquisition), 255 ignored. Flooded water is the CEMS delineation, so the output is observed flood extent at acquisition time, not a forecast.",
   "availability_status": "available",
   "geometry": {
@@ -31,10 +32,10 @@
       19.540013,
       41.983337
     ],
-    "flood_polygons": 49,
+    "flood_polygons": 40,
     "min_polygon_px": 25,
     "vector_simplify_m": 10.0
   },
-  "flood_area_km2": 24.798,
-  "permanent_water_area_km2": 6.531
+  "flood_area_km2": 28.815,
+  "permanent_water_area_km2": 0.961
 }
