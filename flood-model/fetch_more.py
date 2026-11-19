@@ -8,6 +8,9 @@ Run from the flood-model folder:
     python fetch_more.py              # about 300 tiles, about 1.1 GB
     python fetch_more.py --tiles 150  # fewer, if disk is tight
     python fetch_more.py --heldout --tiles 50  # random tiles from the held-out 2025 floods, for testing only
+    python fetch_more.py --split val --tiles 80  # random validation tiles, for picking the best training round
+    python fetch_more.py --pre [--split ...]   # add the before-flood radar for tiles already downloaded
+    python fetch_more.py --dem [--split ...]   # add the ground-height map for tiles already downloaded
 Files land in data/full/<area>/{s1grd,label,validity}/, the same layout as the sample.
 """
 import argparse
@@ -131,30 +134,42 @@ def extract(tar_path, members):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tiles", type=int, default=300)
-    ap.add_argument("--heldout", action="store_true", help="2025 floods kept out of training, saved to data/heldout")
+    ap.add_argument("--split", choices=["train", "val", "heldout"], default="train",
+                    help="train -> data/full, val (for picking the best training round) -> data/val, heldout (2025 floods, final test) -> data/heldout")
+    ap.add_argument("--heldout", action="store_true", help="same as --split heldout")
+    ap.add_argument("--pre", action="store_true", help="add the before-flood radar for the tiles already in that split's folder")
+    ap.add_argument("--dem", action="store_true", help="add the ground-height map (DEM) for the tiles already in that split's folder")
     a = ap.parse_args()
+    split = "heldout" if a.heldout else a.split
     global OUT
-    prefix = "geoid-flood-heldout/shards/test/" if a.heldout else "geoid-flood/shards/train/"
-    OUT = "data/heldout" if a.heldout else OUT
+    OUT = {"train": "data/full", "val": "data/val", "heldout": "data/heldout"}[split]
+    prefix = "geoid-flood-heldout/shards/test/" if split == "heldout" else f"geoid-flood/shards/{split}/"
 
     index = json.load(gzip.open(get_meta("shard_index.json.gz")))["shards"]
-    train = [s for s in index if s["path"].startswith(prefix)]
-    label_tar = get_meta(next(s["path"] for s in train if "/label/" in s["path"]))
-    valid_tar = get_meta(next(s["path"] for s in train if "/validity/" in s["path"]))
-    extra = [get_meta(next(s["path"] for s in train if "/permwater/" in s["path"]))] if a.heldout else []  # map of normal water, for the test
+    shards = [s for s in index if s["path"].startswith(prefix)]
+    label_tar = get_meta(next(s["path"] for s in shards if "/label/" in s["path"]))
+    valid_tar = get_meta(next(s["path"] for s in shards if "/validity/" in s["path"]))
+    extra = [] if split == "train" else [get_meta(next(s["path"] for s in shards if "/permwater/" in s["path"]))]  # map of normal water, for scoring
 
-    tiles, n_events = pick_random(label_tar, a.tiles) if a.heldout else pick_tiles(label_tar, a.tiles)
-    print(f"picked {len(tiles)} tiles ({n_events} floods to pick from)", flush=True)
+    layer = "dem" if a.dem else "s1grd"
+    if a.pre or a.dem:
+        tiles = sorted({os.path.basename(p).split("_s1grd_")[0] for p in _walk("s1grd")})  # no new picks: the same tiles, plus one more layer
+        kind = "_dem" if a.dem else "_s1grd_pre_"
+        print(f"{'ground height' if a.dem else 'before-flood radar'} for the {len(tiles)} tiles in {OUT}/", flush=True)
+    else:
+        tiles, n_events = pick_tiles(label_tar, a.tiles) if split == "train" else pick_random(label_tar, a.tiles)
+        kind = "_s1grd_post_"
+        print(f"picked {len(tiles)} {split} tiles ({n_events} floods to pick from)", flush=True)
     tile_set = set(tiles)
 
-    want = defaultdict(set)  # shard path -> after-flood radar files to pull from it
-    for s in train:
-        if "/s1grd/" in s["path"]:
+    want = defaultdict(set)  # shard path -> files to pull from it
+    for s in shards:
+        if f"/{layer}/" in s["path"]:
             for m in s["members"]:
                 base = os.path.basename(m)
-                if "_s1grd_post_" in base and base.split("_s1grd_")[0] in tile_set:
+                if kind in base and base.split(f"_{layer}")[0] in tile_set:
                     want[s["path"]].add(m)
-    print(f"{sum(map(len, want.values()))} radar files in {len(want)} shards", flush=True)
+    print(f"{sum(map(len, want.values()))} {layer} files in {len(want)} shards", flush=True)
 
     with ThreadPoolExecutor(14) as ex:
         for path, got in ex.map(lambda kv: fetch_from_shard(*kv), want.items()):
@@ -165,7 +180,7 @@ def main():
         with tarfile.open(tar_path) as tar:
             names = {m.name for m in tar if os.path.basename(m.name).split("_")[0] in have}
         extract(tar_path, names)
-    print(f"done: {len(have)} tiles with radar, label and validity in {OUT}/")
+    print(f"done: {len(have)} tiles in {OUT}/")
 
 
 def _walk(layer):
