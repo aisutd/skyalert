@@ -14,3 +14,5 @@ shapely
 pyarrow
 huggingface_hub
 pytest
+h5py
+nbformat
