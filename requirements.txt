@@ -9,6 +9,10 @@ matplotlib
 tifffile
 kaggle
 torch
+rasterio
+shapely
+pyarrow
+huggingface_hub
 pytest
 h5py
 nbformat
