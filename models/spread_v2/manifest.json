@@ -1,0 +1,62 @@
+{
+  "channels": [
+    "fire_t",
+    "fire_t1",
+    "fire_t2",
+    "frp_t",
+    "elevation",
+    "wind_u",
+    "wind_v",
+    "tmmn",
+    "tmmx",
+    "sph",
+    "pr",
+    "erc",
+    "pdsi"
+  ],
+  "threshold": 0.323,
+  "best_epoch": 19,
+  "val": {
+    "val_iou": 0.2795590948366456,
+    "val_threshold": 0.323,
+    "val_pr_auc": 0.36611964394687174,
+    "val_precision": 0.4534297943259725,
+    "val_recall": 0.42164770525870876,
+    "val_new_fire_recall": 0.10291858678955453,
+    "val_forecast_px": 26401,
+    "val_burned_px": 28391
+  },
+  "settings": {
+    "name": "r2_bce_dice",
+    "data_dir": "data/retrain",
+    "runs_dir": "data/retrain/runs",
+    "channels": "all",
+    "pos_weight": 10.0,
+    "dice_weight": 1.0,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "batch_size": 64,
+    "max_epochs": 50,
+    "patience": 5,
+    "max_minutes": 30,
+    "train_limit": null,
+    "val_limit": null,
+    "no_augment": false,
+    "init_ndws": false,
+    "cpu": false,
+    "seed": 42
+  },
+  "created": "2026-11-12T19:13:43",
+  "n_train": 25000,
+  "n_val": 4000,
+  "device": "mps",
+  "training_summary": {
+    "stop_reason": "no val IoU gain for 5 epochs",
+    "best_epoch": 19,
+    "best_val_iou": 0.2795590948366456,
+    "minutes": 12.624175997575124,
+    "peak_memory_gb": 4.514136064,
+    "epochs_run": 24
+  },
+  "source_run": "data/retrain/runs/r2_bce_dice"
+}

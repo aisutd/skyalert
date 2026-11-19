@@ -138,6 +138,12 @@ def summarize_weather(raw):
             "gust": hourly["wind_gusts_10m"][i], "ffwi": fosberg_index(temp, rh, wind),
         })
     peak = max(hours, key=lambda h: h["ffwi"])
+    # Hour-by-hour index for the 24 h before now and the 24 h after, for the prototype's chart
+    series = []
+    for i in range(max(0, start - FORECAST_HOURS), min(start + FORECAST_HOURS, len(hourly["time"]))):
+        temp, rh, wind = hourly["temperature_2m"][i], hourly["relative_humidity_2m"][i], hourly["wind_speed_10m"][i]
+        if None not in (temp, rh, wind):
+            series.append({"time": hourly["time"][i], "ffwi": round(fosberg_index(temp, rh, wind), 1), "past": i < start})
 
     # Rain over the last 7 full days (today is left out: it's partly forecast)
     today = current["time"][:10]
@@ -173,6 +179,7 @@ def summarize_weather(raw):
             "max_gust_mph": max((h["gust"] for h in hours if h["gust"] is not None), default=None),
             "max_temp_f": max(h["temp"] for h in hours),
         },
+        "series": series,
         "risk": {
             **risk_level(peak["ffwi"]),
             "index": round(peak["ffwi"], 1),

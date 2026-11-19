@@ -10,3 +10,7 @@ data/
 node_modules/
 frontend/dist/
 requirements1.txt
+
+# design experiments, not part of the app
+prototype/waves.html
+prototype/fire.html

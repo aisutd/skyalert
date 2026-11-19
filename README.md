@@ -4,12 +4,13 @@
 
 SkyAlert is a computer vision system for detecting wildfires and floods from satellite imagery. It uses a classifier to flag affected regions, a segmentation model to map damage at pixel level, and engineered satellite features to provide actionable information through an interactive dashboard.
 
-## Planned Technologies
+## Technologies
 
-- Python and JavaScript
-- Streamlit or Gradio with Folium
-- PyTorch, ResNet, U-Net, Rasterio, and scikit-learn
-- NASA FIRMS, DeepGlobe, Google Earth Engine, and Copernicus EMS
+- **Backend:** Python, FastAPI, pandas
+- **Frontend:** React + React Leaflet (the UI first built as the HTML prototype in `prototype/`)
+- **Models:** PyTorch U-Nets, trained on Kaggle GPUs
+- **Live data:** NASA FIRMS (VIIRS NOAA-20), Open-Meteo, GRIDMET, OpenStreetMap Nominatim, Esri map tiles
+- **Training data:** Landsat-8 Active Fire and Next Day Wildfire Spread (flood: Sen1Floods11 planned)
 
 ## Quick start
 
@@ -34,19 +35,40 @@ npm install                        # first time only
 npm run dev                        # prints the address to open
 ```
 
-Wait for Terminal 1 to print `Uvicorn running on http://127.0.0.1:8000`, then open the address Terminal 2 printed (usually **http://localhost:5173**). Full details and troubleshooting are below.
+Wait for Terminal 1 to print `Uvicorn running on http://127.0.0.1:8000`, then open the address Terminal 2 printed (usually **http://localhost:5173**). The badge at the top right should say **Live data**. If a banner says it's showing sample data, the backend isn't reachable. Full details and troubleshooting are below.
+
+## Live prototype (single page, no npm)
+
+`prototype/index.html` is the design prototype (overview that opens into the map) running on live data. The backend serves it, so only one terminal is needed:
+
+```bash
+source .venv/bin/activate
+python -m backend.dashboard
+```
+
+Then open **http://127.0.0.1:8000/prototype/**. Open it through this address, not by double-clicking the file: the page gets its data from `/api` on the same server, so from `file://` it falls back to sample data and shows a banner saying so.
+
+The first load can take several seconds while the backend downloads the fires from NASA and the weather for each one. After that the fires are cached for 10 minutes.
+
+The page has two views. The **overview** shows the riskiest fire in the area on the map (the whole contiguous US at first) as one big number, with the map in a box on the right. **Focus on the map** opens the map full screen, with three floating panels: the summary (top left), the selected fire and the list of fires (right) and the weather (bottom). **Overview**, or `Esc`, goes back.
+
+- **Fire** is live: today's NASA FIRMS detections across the US (red dots) and the 8 strongest fires in the area on the map, numbered on the map. In the map view the list follows as you pan and zoom. Each one gets its place name, weather and the Fosberg fire-weather index from `/api/fire-context`, plus the spread model's chance of fire within 2 km (`/api/spread-forecast`), and the list is sorted by that chance (by the index if the model can't run). Detections within 15 km of each other count as one fire. Click a fire dot or any other spot on the map to add it to the list and see its weather.
+- **Flood** is still sample data.
+- **Model on a past fire** (button on the overview, or the switch in the map view) draws the fire detector's output on the map at its real location: 4 Landsat-8 tiles in Sequoia National Forest, Aug 27, 2020, placed by matching them against Landsat scene 042/035 from that day. The spread predictor's examples are shown in the bottom panel, not on the map, because their test data has no locations.
+- **Model results** (chart button) has the same results as a popup, plus the training-data stats. Images are in `prototype/model_results/`.
+- **Spread model on today's data:** put `spread_unet.pt` and `spread_feature_stats.csv` from Kaggle in `data/training/` and restart the backend. The page then shows the model's chance of fire tomorrow for each fire (big number, list and a heat-map layer) instead of the fire-weather index. `backend/spread_forecast.py` builds the model's 12 inputs from FIRMS, GRIDMET and elevation tiles, and loads the model code from `notebooks/train_spread.ipynb`, like `demos/spread_examples.py`. NDVI and population aren't filled yet (they need a NASA Earthdata login), so they get the training average, as the training code does for missing pixels. Without the files, the page says it's waiting for the weights.
 
 ## Running SkyAlert from scratch
 
 SkyAlert has two parts that run at the same time:
 
-- **Backend** (Python, data only): `backend/firms_client.py` fetches fire detections from NASA FIRMS, `backend/data_cleaning.py` cleans them, `main.py` chains the two, `backend/fire_context.py` gets the weather and place name for the fire popup, and `backend/dashboard.py` (FastAPI) serves it all as JSON on port 8000.
-- **Frontend** (React, all the UI): `frontend/` draws the dashboard on port 5173: stat cards, the fire map with a popup and heatmap, and the Analytics table. It gets every piece of data from the backend through `frontend/src/lib/api.js`.
+- **Backend** (Python, data only): `backend/firms_client.py` fetches fire detections from NASA FIRMS, `backend/data_cleaning.py` cleans them, `main.py` chains the two, `backend/fire_context.py` gets the weather and place name for each fire, `backend/spread_forecast.py` runs the spread model on live inputs, and `backend/dashboard.py` (FastAPI) serves it all as JSON on port 8000. It also serves the live prototype at `/prototype/`.
+- **Frontend** (React, all the UI): `frontend/` runs on port 5173. It opens on the overview (today's top fire, its fire-weather index and weather); "Focus on the map" morphs into the full map view with the fire list, weather panel and the model on a past fire. Flood shows sample data until there's a flood model. Every backend call is in `frontend/src/lib/api.js`.
 
 ### 1. Install the tools (once per computer)
 
-- **Python 3.10 or newer** (tested on 3.12). Check with `python3 --version`.
-- **Node.js 20.19+ or 22.12+** (needed by Vite). Check with `node --version`.
+- **Python 3.10 or newer** (tested on 3.12 and 3.13). Check with `python3 --version`.
+- **Node.js 20.19+ or 22.12+** (needed by Vite; also works on 25). Check with `node --version`.
 - **Git**
 
 ### 2. Get the code
@@ -137,12 +159,16 @@ This fetches and cleans the fires and prints the first few rows. No server or br
 | Problem | Fix |
 |---|---|
 | `FIRMS_MAP_KEY is not set` | Do step 3: create `.env` in the `skyalert` folder with your key. |
-| Dashboard opens but shows "Couldn't load stats" or no fire dots | The backend isn't running. Start Terminal 1 and refresh. |
+| Banner says "Live data isn't available… so this is sample data" | The backend isn't running or crashed. Start Terminal 1, wait for the Uvicorn line, then refresh. |
 | `ModuleNotFoundError: No module named 'backend'` | You're inside the `backend/` folder. Run `cd ..` to get back to `skyalert`, then `python -m backend.dashboard`. |
 | `python dashboard.py` says "No such file" | The server moved to `backend/`. Use `python -m backend.dashboard` from the `skyalert` folder. |
-| Map shows a 502 error for fire detections | The frontend can't reach the backend. Start Terminal 1 (or check it didn't crash), wait for the Uvicorn line, then refresh. |
+| `http://127.0.0.1:5173` doesn't load | Vite listens on `localhost` (IPv6), not `127.0.0.1`. Use **http://localhost:5173**. |
 | `Address already in use` (port 8000 or 5173) | The backend or frontend is already running in another terminal. Use that one or stop it first. |
 | `npm run dev` complains about the Node version | Install Node.js 20.19+ or 22.12+. |
+| Prototype shows "Live data isn't available… sample data" | The backend isn't running, or the page was opened as a file. Start the backend and open http://127.0.0.1:8000/prototype/. |
+| Prototype says "Waiting for weights" | Expected until `spread_unet.pt` and `spread_feature_stats.csv` are in `data/training/`. Everything else works without them. |
+| Prototype says "Inputs unavailable" | The weights are there, but GRIDMET didn't answer. Try again later; the fire-weather index is still shown. |
+| 0 fires, or far fewer than usual | Check `FIRMS_SOURCE` in `main.py`. A satellite can stop sending data (SNPP did after 2026-11-02); switch to another VIIRS source such as `VIIRS_NOAA20_NRT` or `VIIRS_NOAA21_NRT`. |
 
 See `APIS.md` for every API the project calls and exposes.
 
@@ -200,6 +226,53 @@ Scores on the test split, which the models never trained on.
 
 Detection precision and recall count fire pixels against the voting mask. Spread scores count 1 km pixels that burn the next day, leaving out uncertain pixels.
 
+## Next-day spread forecast
+
+The dashboard (Sneha's design, `frontend/`) lists the strongest fires in the area on the map and
+runs the spread model on each:
+- The first view is the whole contiguous US.
+- In the map view, the list follows wherever you pan or zoom.
+- Clicking any fire dot adds that fire to the list with its forecast.
+
+Each fire shows its **chance of fire within 2 km** on the forecast day. The selected fire's panel
+gives the forecast details (likely area, new spread, input dates), and the map draws its forecast:
+the 64 × 64 pixel area, about 64 km north–south, in 1 km pixels.
+
+The chances are calibrated: the model's scores were mapped to how often fire really followed, on
+the 2023 fires (`training/calibrate_v2.py`, `models/spread_v2/calibration.json`). The forecast is
+for the day after the latest complete day of satellite data, so the UI shows its date rather than
+"tomorrow".
+
+- **Model:** `models/spread_v2/` (weights, input stats, threshold), served by
+  `backend/spread_forecast.py` at `GET /api/spread-forecast`.
+- **Inputs, built live:** NOAA-20 VIIRS fire on the last three days (FIRMS), gridMET weather and
+  drought, and AWS terrain. They're built with the same code as the training tiles, and
+  `tests/test_spread_forecast.py` checks that they match.
+- **Accuracy:** tested on the 2024–2025 fire seasons, which it never saw. Its overlap score with
+  what burned the next day (IoU, 0–1) beat assuming tomorrow looks like today:
+
+  | Fires | Model | Tomorrow = today |
+  |---|---|---|
+  | Natural mix (mostly small fires) | 0.22 | 0.16 |
+  | Larger, growing fires | 0.32 | 0.26 |
+
+  About 44% of the area it marks as likely did burn. On growing fires it caught 16% of new spread.
+  Full scores are in `docs/spread_v2_test_results.txt`.
+- **Spread, past fire** (map view, Fire) replays held-out 2024–2025 fires. Each shows the fire on
+  the day the forecast starts from, the forecast, and what actually burned the next day, each with
+  its own checkbox, plus that forecast's scores. These are the test fires where the model did best;
+  see `docs/spread_retrain_plan.md`, "Demo examples".
+- **No forecast without fire data:** if NOAA-20 detections can't be loaded, or show a data gap,
+  the API answers `status: "inputs_unavailable"` with the reason, instead of a misleading map.
+- **How it was built:** `docs/spread_retrain_plan.md` is the plan and evidence.
+  - `training/build_spread_dataset.py` builds the tiles. It needs the gridMET yearly files from
+    `python -m backend.gridmet_bulk download`, about 6 GB.
+  - `training/train_spread_v2.py` trains, capped so it stays gentle on a laptop.
+  - `training/evaluate_v2.py` scores against the baselines.
+
+An earlier attempt with the Kaggle-trained model (`backend/spread_model.py`) didn't beat "tomorrow
+= today" on live-style inputs; see `docs/spread_backtest_report.md`.
+
 ## Demos
 
 The demo scripts run the trained models on test data and save figures for presentations to `docs/figures/`. They need the weights and stats downloaded from Kaggle into `data/training/`.
@@ -216,8 +289,14 @@ python demos/spread_examples.py
 
 ```
 main.py                       Fetch and clean FIRMS fires without the dashboard
-backend/                      FIRMS client, cleaning, fire context, FastAPI dashboard API
-frontend/                     React dashboard
+backend/                      FIRMS client, cleaning, fire context, spread forecast, FastAPI dashboard API
+models/spread_v2/             The live next-day spread model (weights, stats, threshold)
+training/                     Build the v2 dataset, train, and evaluate the spread model
+tests/                        pytest (python -m pytest tests; add --network for live-service tests)
+prototype/index.html          Live single-page prototype, served at /prototype/
+prototype/model_results/      Detector and spread-model images used by the prototype
+frontend/                     React app: src/App.jsx (state + overview ⇄ map morph), src/components/, src/lib/ (API, live data, sample data)
+frontend/public/model_results/ Detector and spread-model images used by the React app
 APIS.md                       Every API the project calls and exposes
 docs/integration.md           How fetch, cleaning, map, and dashboard fit together
 notebooks/fires.ipynb         FIRMS data exploration
@@ -235,14 +314,8 @@ docs/figures/                 Demo figures for presentations
 data/                         Downloaded datasets and trained weights, not committed
 ```
 
-## Docker Setup
+## Docker (not needed yet)
 
-Make sure Docker Desktop is installed and running.
+You do not need Docker to run anything in this repo. Use the Quick start steps above instead.
 
-```bash
-docker compose up -d
-docker compose down
-docker compose ps
-```
-
-This is a generic starter configuration. The team can add project-specific dependencies and startup commands later.
+`docker-compose.yml` is an empty placeholder. It starts a bare Linux container with no Python and no project code running, so it cannot run the backend, the frontend, or the notebooks. It is kept so the team can turn it into a real setup later.
