@@ -23,6 +23,7 @@ import json
 import os
 import shutil
 import tarfile
+import zlib
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -156,10 +157,32 @@ def round_robin(df, n, rng):
     return out[:n]
 
 
-def select(c, budgets, flooded_share):
-    rng = np.random.default_rng(0)
+def grow_val(c, min_events):
+    """Move whole train groups (seeded hash order) to val until val covers at least min_events events.
+
+    Test and heldout groups never move, so their tiles and results stay comparable."""
+    val_events = set(c.loc[c.my_split == "val", "event_id"])
+    train_groups = sorted(c.loc[c.my_split == "train", "split_group"].unique(),
+                          key=lambda g: hashlib.sha1(f"{SEED}:val:{g}".encode()).hexdigest())
+    moved = []
+    for g in train_groups:
+        if len(val_events) >= min_events:
+            break
+        c.loc[c.split_group == g, "my_split"] = "val"
+        val_events |= set(c.loc[c.split_group == g, "event_id"])
+        moved.append(g)
+    return moved
+
+
+def select(c, budgets, flooded_share, pinned=None):
+    """Tiles per split. A split listed in `pinned` keeps exactly those sample ids."""
+    pinned = pinned or {}
     picked = []
     for split, n in budgets.items():
+        if split in pinned:
+            picked += pinned[split]
+            continue
+        rng = np.random.default_rng(zlib.crc32(split.encode()))  # per split, so one split's pool never shifts another's picks
         pool = c[(c.my_split == split) & (c.valid_frac >= MIN_VALID) & ~c.excluded]
         wet = pool[pool.flood_px > FLOODED * pool.valid_px]
         dry = pool[pool.flood_px == 0]
@@ -259,6 +282,9 @@ def main():
     ap.add_argument("--test", type=int, default=110)
     ap.add_argument("--heldout", type=int, default=50)
     ap.add_argument("--workers", type=int, default=12)
+    ap.add_argument("--val-events", type=int, default=0, help="move train groups to val until val has this many events")
+    ap.add_argument("--pin-eval", help="take the test and heldout tiles exactly from this earlier manifest")
+    ap.add_argument("--name", default="manifest", help="output file stem: <name>.csv and <name>_meta.json")
     a = ap.parse_args()
     budgets = {"train": a.train, "val": a.val, "test": a.test, "heldout": a.heldout}
     # Training leans on flooded tiles so the rare class shows up; evaluation keeps many dry tiles
@@ -287,7 +313,19 @@ def main():
     if any(leaks.values()):
         raise SystemExit(f"split leaks ground between splits: {leaks}")
 
-    picked = select(c, budgets, flooded_share)
+    moved = grow_val(c, a.val_events) if a.val_events else []
+    if moved:
+        print(f"moved {len(moved)} train groups to val: val now {c[c.my_split == 'val'].event_id.nunique()} events, "
+              f"train {c[c.my_split == 'train'].event_id.nunique()} events", flush=True)
+    pinned = {}
+    if a.pin_eval:
+        old = pd.read_csv(a.pin_eval)
+        pinned = {s: old.loc[old.split == s, "sample_id"].tolist() for s in ("test", "heldout")}
+        now = dict(zip(c.sample_id, c.my_split))
+        wrong = [t for s, ids in pinned.items() for t in ids if now.get(t) != s]
+        if wrong:
+            raise SystemExit(f"pinned tiles changed split: {wrong[:5]}")
+    picked = set(select(c, budgets, flooded_share, pinned))
     print(f"selected {len(picked)} tiles", flush=True)
     extract_masks(shards, picked)
 
@@ -305,7 +343,7 @@ def main():
     radar_files = {os.path.basename(m).split("_s1grd_")[0]: m for ms in want.values() for m in ms if (OUT / m).exists()}
 
     manifest = manifest_rows(c, picked, radar_files)
-    manifest.to_csv(OUT / "manifest.csv", index=False)
+    manifest.to_csv(OUT / f"{a.name}.csv", index=False)
     group_map = c[["split_group", "my_split"]].drop_duplicates().sort_values("split_group")
     split_version = hashlib.sha1(group_map.to_csv(index=False).encode()).hexdigest()[:12]
     info = {
@@ -320,8 +358,10 @@ def main():
         "selection": {"budgets": budgets, "flooded_share": flooded_share, "min_valid_frac": MIN_VALID, "flooded_if_flood_frac_over": FLOODED},
         "selected_tiles": manifest.split.value_counts().to_dict(),
         "selected_events": manifest.groupby("split").event_id.nunique().to_dict(),
+        "val_grown_to_events": a.val_events or None, "train_groups_moved_to_val": len(moved),
+        "eval_tiles_pinned_from": a.pin_eval,
     }
-    (OUT / "manifest_meta.json").write_text(json.dumps(info, indent=2))
+    (OUT / f"{a.name}_meta.json").write_text(json.dumps(info, indent=2))
     print(json.dumps(info, indent=2))
 
 

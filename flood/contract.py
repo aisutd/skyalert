@@ -8,6 +8,10 @@ from pathlib import Path
 
 HAZARD, TASK = "flood", "detection"
 PREPROCESSING_VERSION = "s1grd-post-db-v1"
+# Same radar preprocessing plus a static permanent-water reference (1 water, 0 not) as a third channel.
+# Live use needs a reference on the image grid, e.g. JRC Global Surface Water occurrence resampled.
+PREPROCESSING_VERSION_PERMWATER = "s1grd-post-db+permwater-v1"
+PREPROCESSING_VERSIONS = {PREPROCESSING_VERSION: ["VV", "VH"], PREPROCESSING_VERSION_PERMWATER: ["VV", "VH", "permwater"]}
 
 # Input: one post-event Sentinel-1 GRD acquisition, in the band order the GeoTIFF names them.
 INPUT_SCHEMA = {

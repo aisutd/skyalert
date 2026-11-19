@@ -26,9 +26,9 @@ from rasterio.warp import transform_bounds, transform_geom
 
 from . import bundle as bundles
 from . import contract
-from .data import ContractError, _open, check_grid, normalize, read_manifest, read_radar
+from .data import ContractError, _open, check_grid, model_input, read_manifest, read_radar
 from .metrics import pixel_km2
-from .model import predict_classes
+from .model import decide, predict_classes, predict_probs
 
 ACQUIRED = re.compile(r"_post_(\d{8}T\d{6})")
 MIN_POLYGON_PX = 25  # drop specks under 0.25 ha at 10 m from the vector layer (the raster keeps them)
@@ -48,8 +48,8 @@ def run(radar, out_root, bundle_dir=None, validity=None, permwater=None, source_
     dev = bundles.device()
     model, meta, mean, std = bundles.load(bundle_dir or bundles.latest(), dev)
     use_permwater = meta.get("chosen_variant") == "model_permwater"
-    if use_permwater and permwater is None:
-        raise ContractError("this bundle was selected with the permanent-water reference; pass --permwater")
+    if (use_permwater or meta["permwater_input"]) and permwater is None:
+        raise ContractError("this bundle needs the permanent-water reference on the image grid; pass --permwater")
 
     valid_mask = pw = None
     with _open(radar) as grid:
@@ -68,18 +68,19 @@ def run(radar, out_root, bundle_dir=None, validity=None, permwater=None, source_
         inputs += json.loads(tags.get("SOURCE_PRODUCTS", "[]"))
     except json.JSONDecodeError:
         pass
-    pid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{meta['model_version']}|{contract.PREPROCESSING_VERSION}|{'|'.join(inputs)}"))
+    pid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{meta['model_version']}|{meta['preprocessing_version']}|{'|'.join(inputs)}"))
     out = Path(out_root) / pid
     out.mkdir(parents=True, exist_ok=True)
 
     record = {
         "prediction_id": pid, "hazard": contract.HAZARD, "task": contract.TASK,
         "product": "observed flood extent at acquisition time (not a forecast)",
-        "model_version": meta["model_version"], "preprocessing_version": contract.PREPROCESSING_VERSION,
+        "model_version": meta["model_version"], "preprocessing_version": meta["preprocessing_version"],
         "input_ids": inputs, "acquisition_time_utc": acquired, "generated_at_utc": generated,
         "valid_coverage": round(float(valid.mean()), 4),
         "output_units": {"raster": "class codes 0 background, 1 permanent water, 2 flooded water, 255 no data", "area": "km2"},
         "scores_are_probabilities": False,
+        "decision": meta.get("decision", "argmax"),
         "label_semantics": contract.LABEL_SEMANTICS,
     }
     if not valid.any():
@@ -87,9 +88,13 @@ def run(radar, out_root, bundle_dir=None, validity=None, permwater=None, source_
         (out / "result.json").write_text(json.dumps(record, indent=2))
         return record
 
-    pred = predict_classes(model, normalize(x, mean, std), dev)
-    if use_permwater:
-        pred = np.where(pred > 0, np.where(pw, contract.PERMANENT_WATER, contract.FLOOD), contract.BACKGROUND).astype("uint8")
+    z = model_input(x, mean, std, pw if meta["permwater_input"] else None)
+    if "decision_threshold_255" in meta:  # threshold and variant chosen on val by flood.evaluate
+        pred = decide(predict_probs(model, z, dev), meta["chosen_variant"], meta["decision_threshold_255"], pw)
+    else:
+        pred = predict_classes(model, z, dev)
+        if use_permwater:
+            pred = np.where(pred > 0, np.where(pw, contract.PERMANENT_WATER, contract.FLOOD), contract.BACKGROUND).astype("uint8")
     pred[~valid] = contract.IGNORE
 
     raster_profile = {k: profile[k] for k in ("crs", "transform", "width", "height")}

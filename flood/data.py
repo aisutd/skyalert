@@ -98,11 +98,19 @@ def iter_split(manifest, split, root):
         yield dict(read_sample(r, root), sample_id=r["sample_id"], event_id=r["event_id"])
 
 
-def load_scaled(manifest, split, root, mean, std):
-    """Compact samples for training/evaluation: scaled radar z as float16 plus labels and masks."""
+def model_input(x, mean, std, permwater=None):
+    """Scaled radar, plus the permanent-water reference as a 0/1 channel when the model takes one."""
+    z = normalize(x, mean, std)
+    if permwater is not None:
+        z = np.concatenate([z, permwater[None].astype("float16")])
+    return z
+
+
+def load_scaled(manifest, split, root, mean, std, permwater_input=False):
+    """Compact samples for training/evaluation: model input z as float16 plus labels and masks."""
     out = []
     for s in iter_split(manifest, split, root):
-        s["z"] = normalize(s.pop("x"), mean, std)
+        s["z"] = model_input(s.pop("x"), mean, std, s["permwater"] if permwater_input else None)
         out.append(s)
     return out
 
