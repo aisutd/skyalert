@@ -20,10 +20,11 @@ flood forecast (that is T6) and a historical evaluation does not establish live 
 
 ```bash
 pip install -r requirements.txt
-python -m flood.geoid          # ~1.7 GB: manifest + 450 selected tiles into data/flood/geoid/
-python -m flood.train          # bundle into data/flood/bundles/flood-unet-<UTC time>/
-python -m flood.evaluate       # <bundle>/evaluation/report.md
-python -m flood.predict --sample-id <a test sample_id from the manifest>
+python -m flood.geoid          # ~1.7 GB: manifest.csv + 450 selected tiles into data/flood/geoid/
+python -m flood.geoid --name manifest_v2 --val-events 40 --pin-eval data/flood/geoid/manifest.csv --train 300 --val 150
+python -m flood.train --manifest data/flood/geoid/manifest_v2.csv --name flood-unet-v2
+python -m flood.evaluate --bundles data/flood/bundles/flood-unet-v2-<time> --manifest data/flood/geoid/manifest_v2.csv
+python -m flood.predict --sample-id <a test sample_id> --manifest data/flood/geoid/manifest_v2.csv
 python -m pytest flood/tests -q
 ```
 
@@ -48,36 +49,40 @@ not taken from the dataset card (those statistics include pixels from our test e
 Training tiles are 75% flooded; evaluation tiles 60% flooded and 40% dry, so dry-scene false
 alarms can be measured. Pooled pixel metrics therefore describe this enriched sample.
 
-## Results: baseline `flood-unet-20261119T025417Z-107bfbad`
+## Results: `flood-unet-v2-20261119T034731Z-b5de5fba`
 
-Trained on 240 tiles / 130 events, stopped at epoch 21 (best val flood IoU 0.260 at epoch 13),
-about 14 minutes on an M-series laptop (MPS). Full report:
-[examples/evaluation/report.md](examples/evaluation/report.md); bundle metadata:
-[examples/evaluation/bundle.json](examples/evaluation/bundle.json). Weights are not committed.
+Trained on 300 tiles / 109 events (`manifest_v2.csv`), best val checkpoint at epoch 34.
+Choices made on val only (38 events): U-Net alone beat U-Net + permanent-water reference, with the
+flood threshold at 47/255 chosen for the best F2 (recall weighted 2x). The test and 2026 tiles are
+the same pinned tiles as the first baseline (PR #10), scored once.
+Full report: [examples/evaluation/report.md](examples/evaluation/report.md). Weights are not committed.
 
-| held-out set | method | flood IoU | Dice | precision | recall | dry-scene alarms | permanent water called flood |
-|---|---|---|---|---|---|---|---|
-| test: 110 tiles, 47 events | **U-Net (selected on val)** | 0.276 | 0.433 | 31.3% | 70.5% | 31/44 | 52.9% |
-| | U-Net + permanent-water reference | 0.372 | 0.542 | 43.4% | 72.3% | 28/44 | 1.9% |
-| | VH < −22 dB + reference (tuned on val) | 0.264 | 0.418 | 32.2% | 59.7% | 44/44 | 0.8% |
-| 2026 floods: 50 tiles, 7 events | **U-Net (selected on val)** | 0.423 | 0.594 | 51.9% | 69.5% | 12/20 | 35.3% |
-| | U-Net + permanent-water reference | 0.501 | 0.667 | 62.1% | 72.2% | 9/20 | 0.0% |
-| | VH < −22 dB + reference | 0.402 | 0.574 | 53.0% | 62.5% | 18/20 | 0.0% |
+| held-out set | method | recall | precision | flood IoU | accuracy* | dry-scene alarms |
+|---|---|---|---|---|---|---|
+| test: 110 tiles, 47 events | **U-Net v2** | **72.0%** | 40.9% | **0.353** | 95.2% | 27/44 |
+| | first baseline (PR #10) | 70.5% | 31.3% | 0.276 | n/a | 31/44 |
+| | VH < -22.5 dB + reference | 57.1% | 35.2% | 0.278 | 94.6% | 43/44 |
+| | never flood | 0% | n/a | 0 | 96.4% | 0/44 |
+| 2026 floods: 50 tiles, 7 events | **U-Net v2** | **70.5%** | 58.9% | **0.472** | 97.0% | 7/20 |
+| | first baseline (PR #10) | 69.5% | 51.9% | 0.423 | n/a | 12/20 |
+| | VH < -22.5 dB + reference | 59.9% | 57.3% | 0.414 | 96.8% | 18/20 |
 
-Reading these honestly:
+\*Per labelled pixel, flood vs not. About 96% of pixels are not flood, so "never flood" scores 96.4%:
+**accuracy is not a useful measure here**. Read recall, precision and IoU.
 
-- The U-Net only slightly beats a tuned radar threshold on the main test events (0.276 vs 0.264).
-- It over-maps flood: 580 km² predicted vs 257 km² labelled on test. The main error is calling permanent water flood (53% of permanent-water pixels), which also drives most dry-scene false alarms (31 of 44 dry tiles).
-- Val (13 events) picked "U-Net alone", but both held-out sets favour adding the permanent-water reference. The variant was **not** switched after seeing test, because that would select on test. The next run needs a larger val split (more events) so this choice can be made on val.
-- Treat this as a working baseline, not a deployable detector.
+Compared with the first baseline, test IoU rose from 0.276 to 0.353, test precision from 31% to 41%, and
+dry-scene false alarms fell. Recall is about 71-72%: the model finds roughly 7 of every 10 flooded
+pixels and still over-maps (453 km² predicted vs 257 km² labelled on test), mostly by calling
+permanent water flood (40% of permanent-water pixels).
 
-Next steps, all to be decided on val, not test: a larger val split; the permanent-water reference as an input channel or the default post-processing; pre/post-event change detection (doubles radar download); and rerunning on the T2 dataset decision.
+Higher recall is a policy choice: lowering the threshold trades precision for recall. That target
+should be set as a rule on val (e.g. "recall >= 85% on val"), not tuned on test.
+Not yet tried: the permanent-water reference as an input channel (`train.py --permwater-input`),
+pre/post-event change detection, and more training tiles (limited here by 8 GB RAM and disk).
 
 ## Example result for the dashboard
 
-[examples/EMSR501-1-9/](examples/EMSR501-1-9/) holds one held-out test prediction in the shared result contract. It covers Albania, acquired 2021-02-12, with 24.8 km² of flooded water predicted and a tile flood IoU of 0.66:
-
-- `result.json`: provenance, acquisition time, valid coverage, area and WGS84 bounds.
-- `flood.geojson`: polygons, simplified to 10 m.
-
-It is ready for T7 (map layer) and T12 (fixtures). No dashboard code was changed in this branch.
+[examples/EMSR501-1-9/](examples/EMSR501-1-9/) holds one held-out test prediction in the shared
+result contract (Albania, acquired 2021-02-12, 28.8 km² flooded water predicted, tile flood IoU 0.84):
+`result.json` (provenance, decision rule, acquisition time, valid coverage, area, WGS84 bounds) and
+`flood.geojson` (polygons simplified to 10 m). Ready for T7 (map layer) and T12 (fixtures).

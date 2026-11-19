@@ -23,10 +23,15 @@ def load(path, device="cpu"):
     meta = json.loads((path / "bundle.json").read_text())
     if meta.get("hazard") != contract.HAZARD or meta.get("task") != contract.TASK:
         raise ContractError(f"bundle is for {meta.get('hazard')}/{meta.get('task')}, not flood/detection")
-    if meta["preprocessing_version"] != contract.PREPROCESSING_VERSION:
-        raise ContractError(f"bundle preprocessing {meta['preprocessing_version']} != code {contract.PREPROCESSING_VERSION}")
-    if meta["input_schema"]["bands"] != contract.INPUT_SCHEMA["bands"]:
-        raise ContractError(f"bundle bands {meta['input_schema']['bands']} != {contract.INPUT_SCHEMA['bands']}")
+    version = meta["preprocessing_version"]
+    if version not in contract.PREPROCESSING_VERSIONS:
+        raise ContractError(f"bundle preprocessing {version} is not one this code implements {sorted(contract.PREPROCESSING_VERSIONS)}")
+    channels = meta["input_schema"].get("channels", meta["input_schema"]["bands"])
+    if channels != contract.PREPROCESSING_VERSIONS[version]:
+        raise ContractError(f"bundle channels {channels} != {contract.PREPROCESSING_VERSIONS[version]} for {version}")
+    if meta["architecture"]["in_channels"] != len(channels):
+        raise ContractError(f"model takes {meta['architecture']['in_channels']} channels, schema lists {len(channels)}")
+    meta["permwater_input"] = "permwater" in channels
     weights = (path / meta["weights_file"]).read_bytes()
     if hashlib.sha256(weights).hexdigest() != meta["weights_sha256"]:
         raise ContractError("weights.pt does not match the checksum in bundle.json")

@@ -1,4 +1,5 @@
 """The same light U-Net as the wildfire detector (notebooks/train_unet.ipynb), with a 3-class head."""
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -47,6 +48,38 @@ class UNet(nn.Module):
 def build(config):
     cfg = {k: v for k, v in config.items() if k != "name"}
     return UNet(**cfg)
+
+
+@torch.no_grad()
+def predict_probs(model, z, device, window=1024):
+    """Softmax probabilities of permanent water and flood [2, H, W], quantized to uint8 (0-255) to save memory."""
+    model.eval()
+    c, h, w = z.shape
+    m = model.multiple
+    out = np.zeros((2, h, w), dtype=np.uint8)
+    for r in range(0, h, window):
+        for col in range(0, w, window):
+            tile = torch.from_numpy(z[:, r:r + window, col:col + window].astype("float32"))
+            th, tw = tile.shape[1:]
+            tile = F.pad(tile, (0, (-tw) % m, 0, (-th) % m))
+            p = torch.softmax(model(tile[None].to(device))[0, :, :th, :tw], 0)[1:]
+            out[:, r:r + th, col:col + tw] = (p * 255).round().to(torch.uint8).cpu().numpy()
+    return out
+
+
+def decide(probs, variant, threshold, permwater=None):
+    """Classes from quantized probabilities.
+
+    variant "model": flood where p_flood >= threshold, else the likelier of background / permanent water.
+    variant "model_permwater": water where p_water = p_pw + p_flood >= threshold; inside the static
+    permanent-water reference it is permanent water, outside it is flood.
+    threshold is on the 0-255 scale."""
+    p_pw, p_fl = probs[0].astype(np.int16), probs[1].astype(np.int16)
+    if variant == "model":
+        bg = 255 - p_pw - p_fl
+        return np.where(p_fl >= threshold, 2, np.where(p_pw > bg, 1, 0)).astype(np.uint8)
+    water = (p_pw + p_fl) >= threshold
+    return np.where(water, np.where(permwater, 1, 2), 0).astype(np.uint8)
 
 
 @torch.no_grad()

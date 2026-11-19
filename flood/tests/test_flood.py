@@ -208,3 +208,46 @@ def test_predict_reports_unavailable_when_no_valid_pixels(tmp_path, monkeypatch)
     p = write(tmp_path / "x_s1grd_post_20240101T000000.tif", np.zeros((2, H, W), "float32"), descriptions=["VV", "VH"])
     rec = run(str(p), tmp_path / "results", make_bundle(tmp_path / "b"))
     assert rec["availability_status"] == "unavailable" and rec["geometry"] is None
+
+
+def test_permwater_input_bundle_needs_and_uses_reference(sample, monkeypatch):
+    root, row = sample
+    monkeypatch.setattr("flood.bundle.device", lambda: "cpu")
+    b = root / "b3"; b.mkdir()
+    model = UNet(in_channels=3, base=4)
+    torch.save(model.state_dict(), b / "weights.pt")
+    (b / "bundle.json").write_text(json.dumps({
+        "hazard": "flood", "task": "detection", "model_version": "test-v3", "architecture": model.config,
+        "input_schema": {**contract.INPUT_SCHEMA, "channels": ["VV", "VH", "permwater"]},
+        "preprocessing_version": contract.PREPROCESSING_VERSION_PERMWATER,
+        "normalization": {"mean": [-10.0, -17.0], "std": [5.0, 6.0]}, "weights_file": "weights.pt",
+        "weights_sha256": hashlib.sha256((b / "weights.pt").read_bytes()).hexdigest(), "chosen_variant": "model"}))
+    radar = str(root / row["radar_path"])
+    with pytest.raises(ContractError, match="permanent-water reference"):
+        run(radar, root / "results", b)
+    rec = run(radar, root / "results", b, permwater=str(root / row["permwater_path"]))
+    assert rec["preprocessing_version"] == contract.PREPROCESSING_VERSION_PERMWATER and rec["availability_status"] == "available"
+
+
+def test_bundle_channels_must_match_preprocessing(tmp_path):
+    b = make_bundle(tmp_path / "b", preprocessing_version=contract.PREPROCESSING_VERSION_PERMWATER)
+    with pytest.raises(ContractError, match="channels"):
+        load_bundle(b)
+
+
+def test_decide_threshold_and_permwater_variant():
+    from flood.model import decide
+    probs = np.array([[[200, 10, 100]], [[50, 100, 120]]], np.uint8)  # [p_pw, p_flood] for 3 pixels
+    assert decide(probs, "model", 100).tolist() == [[1, 2, 2]]
+    assert decide(probs, "model", 128).tolist() == [[1, 0, 1]]
+    ref = np.array([[True, False, False]])
+    assert decide(probs, "model_permwater", 200, ref).tolist() == [[1, 0, 2]]
+
+
+def test_threshold_tuning_prefers_recall():
+    from flood.evaluate import best_threshold
+    h = np.zeros((2, 256), np.int64)
+    h[0][200] = 50; h[0][60] = 50   # half the flood scores high, half low
+    h[1][60] = 40; h[1][10] = 1000  # a few non-flood share the low score
+    b = best_threshold(h)
+    assert b["threshold"] <= 60 and b["recall"] == 1.0  # F2 takes the extra recall for 40 false positives

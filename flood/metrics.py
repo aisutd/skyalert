@@ -26,6 +26,10 @@ def flood_scores(cm):
         "flood_dice": 2 * tp / max(2 * tp + fp + fn, 1),
         "flood_precision": tp / max(tp + fp, 1) if tp + fp else None,
         "flood_recall": tp / max(tp + fn, 1) if tp + fn else None,
+        "flood_f2": 5 * tp / max(5 * tp + 4 * fn + fp, 1),  # recall weighted twice as much as precision
+        # per-pixel accuracy is dominated by background, so it is high even for weak models; read it with recall
+        "accuracy_flood_vs_not": float((cm.sum() - fp - fn) / max(cm.sum(), 1)),
+        "accuracy_3_class": float(np.trace(cm) / max(cm.sum(), 1)),
         "any_water_iou": float(water_tp / max(water_t + water_p - water_tp, 1)),
         # permanent-water errors, both directions
         "permwater_called_flood": float(cm[PERMANENT_WATER, FLOOD] / pw) if pw else None,
